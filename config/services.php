@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'shopify' => [
+        'webhook_secret' => env('SHOPIFY_WEBHOOK_SECRET'),
+    ],
+
 ];

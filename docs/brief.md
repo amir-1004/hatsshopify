@@ -112,7 +112,7 @@ id, topic, payload (json), status (success|failed), error, processed_at
 
 ### CI (GitHub Actions)
 ```yaml
-on: push → setup PHP 8.4 → composer install → php artisan test → curl Render deploy hook (main, on green)
+on: push → setup PHP 8.4+ → composer install → php artisan test → curl Render deploy hook (main, on green)
 ```
 
 ---
@@ -129,13 +129,14 @@ on: push → setup PHP 8.4 → composer install → php artisan test → curl Re
 ## Timeline
 
 ### Today (2 hours)
-- [x] Toolchain (PHP 8.4 + Composer via php.new)
-- [ ] Scaffold Laravel 13 project + git + GitHub repo
-- [ ] Migrations + models (hats, orders, webhook_events)
+- [x] Toolchain (PHP 8.5 + Composer via php.new)
+- [x] Scaffold Laravel 13 project + git init
+- [x] Migrations + models (hats, orders, webhook_events)
+- [x] Webhook receiver + HMAC middleware + tests (pulled forward from tomorrow)
 - [ ] Shopify dev store: create custom app, get webhook secret, register `orders/create` webhook (Amir, in parallel)
 
 ### Tomorrow (full day)
-- [ ] Webhook receiver + HMAC middleware + tests
+
 - [ ] Hat CRUD API + tests
 - [ ] Order storage + hat linking + tests
 - [ ] Dashboard (orders table, hat admin, design preview)
