@@ -1,58 +1,107 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# HatShop — Shopify Order Webhook Listener
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+An interview demo project: a Shopify `orders/create` webhook listener built on
+Laravel 13, paired with a small hat-product admin and two Claude-powered AI
+features (product descriptions, order-trend insights).
 
-## About Laravel
+## What it is
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Webhook receiver** — verifies Shopify's HMAC signature on every request,
+  persists an audit trail (`webhook_events`), and idempotently upserts orders
+  keyed on `shopify_order_id` (Shopify retries webhooks, so duplicates must be
+  safe).
+- **Hat catalog** — simple CRUD for the products being sold (name, color,
+  style, price, description), with an optional AI-generated description.
+- **Order-to-hat linking** — incoming orders are matched to a hat by
+  case-insensitive line-item title; unmatched orders are kept with a null
+  `hat_id` rather than dropped.
+- **Dashboard** — a single admin page: stat cards, an AI insights panel,
+  a recent-orders table, and a hat management grid — all server-rendered
+  Blade + Tailwind v4 + daisyUI, with vanilla JS/`fetch` for the interactive
+  bits (no SPA framework).
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Architecture sketch
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+```
+Shopify (dev store)
+   │  orders/create webhook (HMAC-SHA256 signed)
+   ▼
+POST /webhook/shopify/orders-create
+   │  VerifyShopifyWebhook middleware: hash_equals(HMAC) or 401
+   ▼
+ShopifyWebhookController
+   │  upsert Order (idempotent on shopify_order_id)
+   │  match line_items[0].title -> Hat (case-insensitive), else null
+   │  always record a WebhookEvent (success|failed) and return 200
+   ▼
+Postgres (Render) / SQLite (local, CI)
 
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+Dashboard & JSON API (routes/api.php, /api/*)
+   │
+   ├─ Hat CRUD ────────────────► ClaudeService ─► Anthropic Messages API
+   │                              (2-3 sentence product description)
+   │
+   └─ Order insights ──────────► ClaudeService ─► Anthropic Messages API
+                                  (plain-language trend summary,
+                                   cached 10 min, deterministic fallback
+                                   if the API is unavailable)
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Both AI-calling paths go through `App\Services\ClaudeService`, which never
+throws — any failure (missing key, HTTP error, timeout, malformed response)
+degrades to `null` (description) or a deterministic stats-based summary
+(insights), so the product never blocks on an external API.
 
-## Contributing
+## API endpoints
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/hats` | Paginated hat list (15/page), newest first |
+| `POST` | `/api/hats` | Create a hat |
+| `GET` | `/api/hats/{hat}` | Show a hat (404 if missing) |
+| `PUT` | `/api/hats/{hat}` | Partial update (all fields `sometimes`) |
+| `DELETE` | `/api/hats/{hat}` | Delete a hat (204) |
+| `POST` | `/api/hats/generate-description` | AI-generate a description from `{name, color, style}` |
+| `GET` | `/api/orders` | Paginated order list (20/page), latest first, with `hat` eager-loaded |
+| `GET` | `/api/orders/{order}` | Show an order, with `hat` eager-loaded |
+| `GET` | `/api/orders/insights` | AI (or fallback) merchant summary of order trends, cached 10 min |
+| `POST` | `/webhook/shopify/orders-create` | Shopify webhook receiver (HMAC-verified) |
+| `GET` | `/dashboard` | Admin dashboard (redirected to from `/`) |
 
-## Code of Conduct
+## Environment variables
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+| Variable | Purpose |
+|---|---|
+| `SHOPIFY_WEBHOOK_SECRET` | Signing secret used to verify `X-Shopify-Hmac-SHA256` |
+| `ANTHROPIC_API_KEY` | Anthropic API key for description/insight generation. If unset, both AI features fall back gracefully (no crash) |
+| `ANTHROPIC_MODEL` | Overrides the model used for Claude calls (default `claude-haiku-4-5`) |
+| `DB_CONNECTION` / `DB_URL` | Postgres in production (Render), SQLite locally and in CI |
+| `APP_ENV`, `APP_KEY`, `APP_DEBUG` | Standard Laravel bootstrap config |
 
-## Security Vulnerabilities
+See `.env.example` for the full list.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Deploy notes
 
-## License
+- **Render blueprint** (`render.yaml`): a Docker web service plus a managed
+  Postgres database. `SHOPIFY_WEBHOOK_SECRET` and `ANTHROPIC_API_KEY` are
+  marked `sync: false` — set them once in the Render dashboard.
+- **Docker** (`Dockerfile`): multi-stage build — Node stage compiles Tailwind
+  v4 + daisyUI assets via Vite, PHP stage runs `composer install --no-dev` and
+  copies the compiled `public/build` output. No local Node/PHP toolchain is
+  required to build the image.
+- **Boot** (`docker/start.sh`): generates an `APP_KEY` if unset, runs
+  `php artisan migrate --force` then `php artisan db:seed --force` on every
+  boot. The seeder (`HatSeeder`) uses `firstOrCreate` keyed on hat name, so
+  it's safe to run on every deploy without duplicating rows or crashing.
+- **CI/CD** (`.github/workflows/ci.yml`): every push runs the PHPUnit suite
+  against SQLite; on a green build to `main`, it curls the Render deploy
+  hook (`RENDER_DEPLOY_HOOK` secret) to trigger a redeploy.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Local-free workflow note
+
+This repository is developed without running `php`, `composer`, `npm`, or
+`artisan` locally — all changes are made directly to source files and
+verified by the CI pipeline (PHPUnit over SQLite) and the Render deploy.
+Frontend assets (Tailwind v4 + daisyUI via `@plugin "daisyui"` in
+`resources/css/app.css`) are compiled entirely inside the Docker build, so
+`npm install` never needs to run outside of CI/the build step.
