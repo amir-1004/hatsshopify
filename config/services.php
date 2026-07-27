@@ -44,4 +44,9 @@ return [
         'model' => env('ANTHROPIC_MODEL', 'claude-haiku-4-5'),
     ],
 
+    'printful' => [
+        'key' => env('PRINTFUL_API_KEY'),
+        'store_id' => env('PRINTFUL_STORE_ID'),
+    ],
+
 ];

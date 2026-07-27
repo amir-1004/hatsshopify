@@ -97,6 +97,55 @@ See `.env.example` for the full list.
   against SQLite; on a green build to `main`, it curls the Render deploy
   hook (`RENDER_DEPLOY_HOOK` secret) to trigger a redeploy.
 
+## Print-on-demand (Printful)
+
+The **Design Studio** (`/studio`, linked from the dashboard navbar and from
+each hat card) lets a merchant put a design on a Printful headwear product
+and push it to a supplier as a draft order — without ever touching a
+persistent filesystem (Render has none) or accidentally paying for
+anything.
+
+```
+Pick base hat            Create design             Generate mockup                 Order from supplier
+(Printful catalog)   →   (upload image OR      →   POST design → DB           →    POST /orders (draft only,
+GET /products             text→canvas→PNG)          POST /mockup-generator/         no `confirm` param —
+category_id=24                                       create-task/{id}                merchant confirms &
+                                                       poll GET /mockup-generator/     pays in their own
+                                                       task until completed             Printful dashboard)
+```
+
+Design images (uploads or the canvas-rendered text design) are stored as
+bytes in the `design_files` table (Postgres `bytea` / SQLite `blob`) and
+served back out over a public, cacheable route so Printful's mockup
+generator and order API can fetch them by URL.
+
+### Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/printful/products` | Curated headwear catalog (category 24), cached 1h. Falls back to a 3-item hardcoded shortlist (`live: false`) if Printful is unconfigured/unavailable |
+| `GET` | `/api/printful/products/{id}` | A catalog product + its color/style variants, cached 1h |
+| `POST` | `/api/design-files` | Store a design — multipart `file` (image, max 4MB) or JSON `{data_url}` (base64). Returns `{id, url}` |
+| `GET` | `/design-files/{designFile}` | Public: streams a stored design's bytes with the correct content type |
+| `POST` | `/api/hats/{hat}/mockup` | Start a Printful mockup-generation task for `{printful_product_id, printful_variant_id, design_file_id}`; persists the ids on the hat. `422` with `{error}` if Printful fails |
+| `GET` | `/api/mockup-tasks/{taskKey}` | Poll a mockup task. Pass `?hat_id=` to persist `mockup_urls` + cover `image_url` on that hat once it completes |
+| `POST` | `/api/hats/{hat}/supplier-order` | Create a **draft** Printful order for `{recipient, quantity}`. Requires the hat already has a variant + design. `422` with `{error}` if unconfigured/missing/failed |
+
+### Never auto-confirmed
+
+`PrintfulService::createDraftOrder()` never sends a `confirm` (or payment)
+parameter — Printful orders default to `draft` status, so every order
+created through the Design Studio sits in the merchant's Printful dashboard
+for manual review and payment. This is asserted directly in
+`tests/Feature/PrintfulTest.php` (the outgoing request body is checked for
+the *absence* of a `confirm` key).
+
+### Environment variable
+
+| Variable | Purpose |
+|---|---|
+| `PRINTFUL_API_KEY` | Printful API key (`Authorization: Bearer`). If unset, catalog/mockup/order calls degrade gracefully — the catalog falls back to a hardcoded shortlist, and mockup/order actions return a `422` rather than crashing |
+
 ## Local-free workflow note
 
 This repository is developed without running `php`, `composer`, `npm`, or

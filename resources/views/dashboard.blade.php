@@ -7,6 +7,9 @@
         <div class="flex-1">
             <span class="text-xl font-semibold">🧢 HatShop — Shopify Order Listener</span>
         </div>
+        <div class="flex-none">
+            <a href="{{ route('studio') }}" class="btn btn-sm btn-outline">🎨 Design Studio</a>
+        </div>
     </div>
 
     <main class="max-w-7xl mx-auto px-4 sm:px-8 py-8 space-y-10">
@@ -148,6 +151,9 @@
                             <p class="font-semibold mt-2">${{ number_format($hat->price, 2) }}</p>
                             <p class="text-sm opacity-70 line-clamp-3">{{ $hat->description ?? 'No description yet.' }}</p>
                             <div class="card-actions justify-end mt-2">
+                                <a href="{{ route('studio') }}?hat={{ $hat->id }}" class="btn btn-sm btn-outline">
+                                    🎨 Design
+                                </a>
                                 <button
                                     type="button"
                                     class="btn btn-sm edit-hat-btn"
