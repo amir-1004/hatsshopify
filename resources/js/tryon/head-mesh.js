@@ -238,8 +238,9 @@ export function buildHeadMesh(landmarks, image, worldWidth, worldHeight) {
     group.add(skull);
     group.add(face);
 
-    // Where a hat's band belongs: up the skull from its centre, in head space.
-    const bandOffset = skullCenter.clone().addScaledVector(up, radius * 0.62);
+    // Where a hat's band belongs: low enough to cross the forehead just above
+    // the brows, rather than perching on the crown like a beret.
+    const bandOffset = skullCenter.clone().addScaledVector(up, radius * 0.42);
 
     return { group, center, radius, basis, bandOffset };
 }
