@@ -137,6 +137,11 @@
             <div id="hats-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 @forelse ($hats as $hat)
                     <div class="card bg-base-100 shadow" data-hat-card="{{ $hat->id }}">
+                        @if ($hat->image_url)
+                            <figure class="bg-base-200">
+                                <img src="{{ $hat->image_url }}" alt="{{ $hat->name }} mockup" class="h-40 w-full object-contain">
+                            </figure>
+                        @endif
                         <div class="card-body">
                             <div class="flex items-center gap-4">
                                 <span
