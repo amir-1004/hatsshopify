@@ -9,7 +9,12 @@ import * as THREE from 'three';
 import { detectFace, measureFace } from './tryon/face.js';
 import { buildHat } from './tryon/hat-model.js';
 
-const FOV = 35;
+// Portraits are shot on long lenses, and the virtual camera has to agree
+// with the one that took the photo. A wide FOV looks steeply up at a hat
+// sitting near the top of the frame, exposing the underside of the brim and
+// the full sweatband ring — the hat reads as a flying saucer. ~20° is an
+// 85mm-equivalent portrait lens, which sees the hat close to head-on.
+const FOV = 20;
 
 document.addEventListener('DOMContentLoaded', () => {
     const stage = document.getElementById('tryon-stage');
