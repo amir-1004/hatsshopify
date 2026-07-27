@@ -151,6 +151,7 @@
                                 <div>
                                     <h3 class="card-title text-base">{{ $hat->name }}</h3>
                                     <span class="badge badge-outline badge-sm">{{ $hat->style }}</span>
+                                    <span class="badge badge-ghost badge-sm">{{ $hat->size }}</span>
                                 </div>
                             </div>
                             <p class="font-semibold mt-2">${{ number_format($hat->price, 2) }}</p>
@@ -166,6 +167,7 @@
                                     data-name="{{ $hat->name }}"
                                     data-color="{{ $hat->color }}"
                                     data-style="{{ $hat->style }}"
+                                    data-size="{{ $hat->size }}"
                                     data-price="{{ $hat->price }}"
                                     data-description="{{ $hat->description }}"
                                 >
@@ -212,6 +214,15 @@
                         <option value="Trucker">Trucker</option>
                         <option value="Beanie">Beanie</option>
                         <option value="Bucket">Bucket</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="label" for="hat-size"><span class="label-text">Size</span></label>
+                    <select id="hat-size" class="select select-bordered w-full" required>
+                        @foreach (\App\Models\Hat::SIZES as $size)
+                            <option value="{{ $size }}">{{ $size }}</option>
+                        @endforeach
                     </select>
                 </div>
 

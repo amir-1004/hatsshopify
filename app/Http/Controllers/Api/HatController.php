@@ -7,6 +7,7 @@ use App\Models\Hat;
 use App\Services\ClaudeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class HatController extends Controller
 {
@@ -27,6 +28,7 @@ class HatController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'color' => ['required', 'string', 'max:100'],
             'style' => ['required', 'string', 'max:100'],
+            'size' => ['sometimes', 'required', Rule::in(Hat::SIZES)],
             'description' => ['nullable', 'string'],
             'image_url' => ['nullable', 'url'],
             'price' => ['required', 'numeric', 'min:0'],
@@ -55,6 +57,7 @@ class HatController extends Controller
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'color' => ['sometimes', 'required', 'string', 'max:100'],
             'style' => ['sometimes', 'required', 'string', 'max:100'],
+            'size' => ['sometimes', 'required', Rule::in(Hat::SIZES)],
             'description' => ['sometimes', 'nullable', 'string'],
             'image_url' => ['sometimes', 'nullable', 'url'],
             'price' => ['sometimes', 'required', 'numeric', 'min:0'],

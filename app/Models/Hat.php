@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'name',
     'color',
     'style',
+    'size',
     'description',
     'image_url',
     'price',
@@ -22,6 +23,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class Hat extends Model
 {
+    /** Allowed hat sizes. */
+    public const SIZES = ['Universal', 'XS', 'S', 'M', 'L', 'XL'];
+
+    /** @var array<string, mixed> */
+    protected $attributes = [
+        'size' => 'Universal',
+    ];
+
     /** @use HasFactory<\Database\Factories\HatFactory> */
     use HasFactory;
 

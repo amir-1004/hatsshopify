@@ -29,6 +29,58 @@ class HatApiTest extends TestCase
         $this->assertEquals($newest->id, $response->json('data.0.id'));
     }
 
+    public function test_store_persists_a_chosen_size(): void
+    {
+        $response = $this->postJson('/api/hats', [
+            'name' => 'Big Fit Cap',
+            'color' => 'Black',
+            'style' => 'Baseball',
+            'size' => 'L',
+            'price' => 59.90,
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonFragment(['size' => 'L']);
+        $this->assertDatabaseHas('hats', ['name' => 'Big Fit Cap', 'size' => 'L']);
+    }
+
+    public function test_store_defaults_size_to_universal_when_omitted(): void
+    {
+        $response = $this->postJson('/api/hats', [
+            'name' => 'One Size Cap',
+            'color' => 'Blue',
+            'style' => 'Snapback',
+            'price' => 49.90,
+        ]);
+
+        $response->assertStatus(201);
+        $this->assertDatabaseHas('hats', ['name' => 'One Size Cap', 'size' => 'Universal']);
+    }
+
+    public function test_store_rejects_an_unknown_size(): void
+    {
+        $response = $this->postJson('/api/hats', [
+            'name' => 'Weird Size Cap',
+            'color' => 'Green',
+            'style' => 'Beanie',
+            'size' => 'XXXL-giant',
+            'price' => 49.90,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['size']);
+    }
+
+    public function test_update_changes_size(): void
+    {
+        $hat = Hat::factory()->create(['size' => 'Universal']);
+
+        $response = $this->putJson("/api/hats/{$hat->id}", ['size' => 'XS']);
+
+        $response->assertStatus(200);
+        $this->assertDatabaseHas('hats', ['id' => $hat->id, 'size' => 'XS']);
+    }
+
     public function test_store_creates_a_hat(): void
     {
         $payload = [

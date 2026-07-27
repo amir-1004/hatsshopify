@@ -68,6 +68,7 @@ function initHatModal() {
     const colorPicker = document.getElementById('hat-color-picker');
     const colorNameField = document.getElementById('hat-color-name');
     const styleField = document.getElementById('hat-style');
+    const sizeField = document.getElementById('hat-size');
     const priceField = document.getElementById('hat-price');
     const descriptionField = document.getElementById('hat-description');
     const formError = document.getElementById('hat-form-error');
@@ -96,6 +97,7 @@ function initHatModal() {
         nameField.value = button.dataset.name ?? '';
         colorNameField.value = button.dataset.color ?? '';
         styleField.value = button.dataset.style ?? 'Baseball';
+        sizeField.value = button.dataset.size ?? 'Universal';
         priceField.value = button.dataset.price ?? '';
         descriptionField.value = button.dataset.description ?? '';
         modal.showModal();
@@ -183,6 +185,7 @@ function initHatModal() {
             name: nameField.value.trim(),
             color: colorNameField.value.trim(),
             style: styleField.value,
+            size: sizeField.value,
             price: priceField.value,
             description: descriptionField.value.trim() || null,
         };

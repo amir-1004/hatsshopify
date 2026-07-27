@@ -27,6 +27,7 @@ class HatFactory extends Factory
             'name' => "{$color} {$style} Hat",
             'color' => $color,
             'style' => $style,
+            'size' => fake()->randomElement(\App\Models\Hat::SIZES),
             'description' => fake()->sentence(12),
             'image_url' => fake()->imageUrl(640, 480, 'fashion'),
             'price' => fake()->randomFloat(2, 15, 60),
