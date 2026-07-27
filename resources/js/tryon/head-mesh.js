@@ -27,6 +27,13 @@ const SURFACE_POINT_COUNT = 468;
  * MediaPipe's face-oval ring, in order. Triangles whose centre falls outside
  * this polygon are dropped — Delaunay fills the convex hull, which would
  * otherwise web the neck and temples over with skin.
+ *
+ * TODO(head-mesh): cropping here leaves a hard rim at the jaw and temples, so
+ * the model reads as a mask edge-on. The fix is a vertex-alpha falloff over
+ * the last ring of triangles so the photo dissolves into the skull instead of
+ * ending in a cut line — plus sampling ear/hair colour into the skull rather
+ * than one flat hair tone. Deliberately deferred; see also the v2 job of
+ * closing the back of the head for a full 360° orbit.
  */
 const FACE_OVAL = [
     10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379,

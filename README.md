@@ -183,7 +183,7 @@ the *absence* of a `confirm` key).
 ```
 photo (never leaves the browser)
    │
-   ├─ MediaPipe FaceLandmarker (WASM, in-page) ─► 478 face landmarks
+   ├─ MediaPipe FaceLandmarker (WASM, in-page) ─► 478 face landmarks (x, y, z)
    │        │
    │        ├─ eye distance in px  ─┐
    │        └─ face width in px    ─┤
@@ -197,11 +197,28 @@ photo (never leaves the browser)
    │                      Ramanujan ellipse     → head circumference (cm)
    │                      circumference         → XS / S / M / L / XL + fit note
    │
-   └─ Three.js ─► procedural 3D hat (crown, visor, band per style), scaled to
-                  the measured skull, anchored on the forehead landmark,
-                  rotated to the head's roll/yaw/pitch — then draggable
-                  (rotate), shift-draggable (move), and scrollable (resize).
+   └─ the same landmarks, as geometry ─► a 3D model of the shopper
+            │
+            ├─ Delaunay-triangulate the 468 surface points, drop everything
+            │  outside the face oval, lift onto the landmarks' own z depth
+            ├─ project the photo on as the texture — the landmarks are
+            │  normalised image coordinates, so they *are* the UVs
+            ├─ mount it on an ellipsoid skull fitted to the same landmarks and
+            │  painted the hair colour sampled from the photo, so the head has
+            │  volume and the hat has something to sit on
+            └─ hat: procedural geometry per style, banded on the hairline
+               landmark, oriented by the head's own axes
+
+drag = turn the head and hat together (±40°) · scroll = zoom · ⇧drag = nudge
 ```
+
+The flat photo stays underneath so the first frame is seamless, then fades as
+the model turns — and the head drifts to centre stage, where there's room to
+zoom into it. The orbit stops at ~40° because a single photo knows nothing
+about the back of a head; closing the skull for a full 360° is a v2 job.
+
+This is the technique behind [PyFace3D](https://github.com/Dor-sketch/PyFace3D)
+and Babylon's [facecap](https://github.com/imerso/facecap), done in Three.js.
 
 Design notes worth saying out loud in an interview:
 
