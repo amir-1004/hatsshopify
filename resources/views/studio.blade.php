@@ -144,6 +144,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const state = {
+                catalogLive: null,
                 hatId: null,
                 printfulProductId: null,
                 printfulVariantId: null,
@@ -212,6 +213,8 @@
                     .then((data) => {
                         spinner.classList.add('hidden');
 
+                        state.catalogLive = data.live !== false;
+
                         if (data.live === false) {
                             liveNote.classList.remove('hidden');
                         }
@@ -254,6 +257,12 @@
 
                 function loadVariants(productId) {
                     variantSection.classList.remove('hidden');
+
+                    if (state.catalogLive === false) {
+                        variantGrid.innerHTML = '<div class="alert alert-warning text-sm">Printful is not connected yet — color variants and real hat mockups require a <code>PRINTFUL_API_KEY</code> on the server. Once it\'s added, reload this page to design on real products.</div>';
+                        return;
+                    }
+
                     variantGrid.innerHTML = '<span class="loading loading-spinner loading-sm"></span>';
 
                     fetch(`/api/printful/products/${productId}`, { headers: { Accept: 'application/json' } })

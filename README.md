@@ -1,8 +1,25 @@
 # HatShop — Shopify Order Webhook Listener
 
+**English** | [עברית](#עברית--hatshop--מאזין-webhooks-להזמנות-shopify)
+
+**Live demo:** https://hatsshopify.onrender.com (free tier — first load after idle can take ~1 min)
+
 An interview demo project: a Shopify `orders/create` webhook listener built on
-Laravel 13, paired with a small hat-product admin and two Claude-powered AI
-features (product descriptions, order-trend insights).
+Laravel 13, paired with a hat-product admin, two Claude-powered AI features
+(product descriptions, order-trend insights), and a Printful print-on-demand
+Design Studio (real hat mockups + draft supplier orders).
+
+## What's real vs. what's simulated
+
+| Piece | Real or mock? |
+|---|---|
+| The app itself | **Real** — Laravel 13 + Postgres, deployed on Render via Docker, CI-gated deploys |
+| Shopify webhooks | **Real mechanics, test data** — a real Shopify **development store** sends genuine `orders/create` webhooks, verified with real HMAC-SHA256 signatures. Orders are test orders: no real customers or money |
+| AI features | **Real AI** — the description generator and order insights make live calls to Anthropic's Claude API. The **AI** badge means Claude actually wrote it; a **fallback** badge means the API was unavailable and you're seeing deterministic, non-AI text |
+| Printful catalog & mockups | **Real** (when `PRINTFUL_API_KEY` is set) — products, color variants, and mockup photos come from Printful's live API; mockups are photorealistic renders of products they actually manufacture. Without the key, the studio shows a hardcoded 3-item shortlist and can't generate mockups |
+| Supplier orders | **Real but draft-only** — "Order from supplier" creates a genuine order in your Printful account in `draft` status. It becomes a physical hat **only** after you review, confirm, and pay in Printful's own dashboard. The code never sends a confirm/payment parameter (asserted by tests) |
+| Seeded hats | **Demo data** — 5 sample hats are seeded on every deploy (idempotently) so the dashboard is never empty |
+| Tests / CI | **All external APIs faked** — the PHPUnit suite uses `Http::fake()`; CI never calls Shopify, Anthropic, or Printful |
 
 ## What it is
 
@@ -154,3 +171,43 @@ verified by the CI pipeline (PHPUnit over SQLite) and the Render deploy.
 Frontend assets (Tailwind v4 + daisyUI via `@plugin "daisyui"` in
 `resources/css/app.css`) are compiled entirely inside the Docker build, so
 `npm install` never needs to run outside of CI/the build step.
+
+---
+
+<div dir="rtl" align="right">
+
+# עברית — HatShop — מאזין Webhooks להזמנות Shopify
+
+**דמו חי:** <https://hatsshopify.onrender.com> (שרת חינמי — טעינה ראשונה אחרי חוסר פעילות יכולה לקחת כדקה)
+
+פרויקט הדגמה לראיון עבודה: אפליקציה שמאזינה ל־webhook מסוג `orders/create` של Shopify, בנויה על Laravel 13, עם ממשק ניהול לקטלוג כובעים, שתי יכולות AI מבוססות Claude (כתיבת תיאורי מוצר ותובנות על הזמנות), וסטודיו עיצוב בחיבור ל־Printful — ספק הדפסה־לפי־דרישה אמיתי (הדמיות פוטוריאליסטיות של הכובע + הזמנות טיוטה מהספק).
+
+## מה אמיתי ומה מדומה (Mock)?
+
+| רכיב | אמיתי או מדומה? |
+|---|---|
+| האפליקציה עצמה | **אמיתית** — Laravel 13 + Postgres, פרוסה ב־Render בעזרת Docker, עם CI שחוסם דיפלוי אם בדיקות נכשלות |
+| Webhooks של Shopify | **מנגנון אמיתי, נתוני בדיקה** — חנות פיתוח (dev store) אמיתית של Shopify שולחת webhooks אמיתיים, שמאומתים בחתימת HMAC-SHA256 אמיתית. ההזמנות הן הזמנות בדיקה: אין לקוחות אמיתיים ואין כסף אמיתי |
+| יכולות ה־AI | **AI אמיתי** — מחולל התיאורים ופאנל התובנות מבצעים קריאות חיות ל־API של Claude (Anthropic). תג **AI** אומר ש־Claude באמת כתב את הטקסט; תג **fallback** אומר שה־API לא היה זמין והטקסט חושב מקומית ללא AI |
+| קטלוג והדמיות Printful | **אמיתי** (כאשר מוגדר `PRINTFUL_API_KEY`) — המוצרים, הצבעים וההדמיות מגיעים מה־API החי של Printful; ההדמיות הן צילומים פוטוריאליסטיים של מוצרים שהם באמת מייצרים. בלי המפתח — הסטודיו מציג רשימה קבועה של 3 מוצרים ואינו יכול לייצר הדמיות |
+| הזמנות מהספק | **אמיתי אבל טיוטה בלבד** — כפתור "Order from supplier" יוצר הזמנה אמיתית בחשבון Printful שלך בסטטוס `draft`. היא תהפוך לכובע פיזי **רק** אחרי שתאשר ותשלם בעצמך בדשבורד של Printful. הקוד לעולם לא שולח פרמטר אישור/תשלום (יש בדיקה אוטומטית שמוודאת זאת) |
+| כובעי הדוגמה | **נתוני דמו** — 5 כובעים לדוגמה נזרעים בכל דיפלוי (באופן אידמפוטנטי) כדי שהדשבורד לא יהיה ריק |
+| בדיקות / CI | **כל ה־API החיצוניים מזויפים** — חבילת הבדיקות משתמשת ב־`Http::fake()`; ה־CI לעולם לא פונה ל־Shopify, ל־Anthropic או ל־Printful |
+
+## מה יש באפליקציה
+
+- **קליטת Webhooks** — אימות חתימת HMAC על כל בקשה, תיעוד מלא בטבלת `webhook_events`, ושמירת הזמנות אידמפוטנטית לפי `shopify_order_id` (Shopify שולחת webhooks חוזרים — כפילויות חייבות להיות בטוחות).
+- **קטלוג כובעים** — CRUD מלא (שם, צבע, סגנון, מחיר, תיאור) עם אפשרות לתיאור שנכתב על ידי AI בלחיצת כפתור.
+- **קישור הזמנה→כובע** — הזמנה נכנסת משודכת לכובע לפי שם הפריט (ללא תלות ברישיות); הזמנה ללא התאמה נשמרת עם `hat_id` ריק ולא נזרקת.
+- **דשבורד** — כרטיסי סטטיסטיקה, פאנל תובנות AI, טבלת הזמנות אחרונות וניהול הקטלוג — הכול Blade + Tailwind v4 + daisyUI עם JavaScript ונילי בלבד (בלי SPA).
+- **סטודיו עיצוב (Printful)** — בחירת דגם כובע אמיתי מהקטלוג, העלאת לוגו או עיצוב טקסט על קנבס, יצירת הדמיה פוטוריאליסטית של הכובע עם העיצוב, ויצירת הזמנת טיוטה אצל הספק.
+
+## איך מדגימים (Demo)
+
+1. פותחים את הדשבורד ~5 דקות לפני (השרת החינמי "נרדם").
+2. יוצרים כובע חדש → לוחצים "✨ Generate with AI" לתיאור.
+3. יוצרים הזמנת בדיקה בחנות הפיתוח של Shopify → ההזמנה מופיעה בדשבורד עם הכובע המקושר.
+4. לוחצים "Generate insights" → סיכום מגמות כתוב על ידי Claude.
+5. בסטודיו: בוחרים דגם, מעצבים, מייצרים הדמיה אמיתית → "Order from supplier" → טיוטה בחשבון Printful.
+
+</div>
