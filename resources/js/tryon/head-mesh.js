@@ -238,9 +238,15 @@ export function buildHeadMesh(landmarks, image, worldWidth, worldHeight) {
     group.add(skull);
     group.add(face);
 
-    // Where a hat's band belongs: low enough to cross the forehead just above
-    // the brows, rather than perching on the crown like a beret.
-    const bandOffset = skullCenter.clone().addScaledVector(up, radius * 0.5);
+    // Where a hat's band belongs — measured, not guessed. Vertically it sits
+    // just under the hairline, which is what landmark 10 is; the skull is
+    // pushed much further back than a hat should be, so the hat only takes
+    // that offset in part.
+    const hairlineHeight = world[LANDMARK.foreheadTop].clone().sub(center).dot(up);
+
+    const bandOffset = new THREE.Vector3()
+        .addScaledVector(forward, -radius * 0.35)
+        .addScaledVector(up, hairlineHeight - radius * 0.15);
 
     return { group, center, radius, basis, bandOffset };
 }
