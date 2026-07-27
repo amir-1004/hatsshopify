@@ -44,15 +44,16 @@ function crown(material, { height = 0.78, depth = 1.2, segments = 48 } = {}) {
  * A visor: half an ellipse extruded into a slab, laid flat and tilted down
  * at the front.
  */
-function visor(material, { reach = 1.55, width = 1.12, thickness = 0.07, tilt = 0.22, squared = false } = {}) {
+function visor(material, { reach = 1.7, width = 1.0, thickness = 0.05, tilt = 0.3, curve = 0.075, squared = false } = {}) {
     const shape = new THREE.Shape();
 
     if (squared) {
-        // Flat-brim look: straighter sides, rounded tip.
+        // Flat-brim look: straighter sides, squared-off tip.
         shape.moveTo(-width, 0);
-        shape.lineTo(-width * 0.94, -reach * 0.72);
-        shape.quadraticCurveTo(-width * 0.7, -reach, 0, -reach);
-        shape.quadraticCurveTo(width * 0.7, -reach, width * 0.94, -reach * 0.72);
+        shape.lineTo(-width * 0.97, -reach * 0.78);
+        shape.quadraticCurveTo(-width * 0.82, -reach, -width * 0.45, -reach);
+        shape.lineTo(width * 0.45, -reach);
+        shape.quadraticCurveTo(width * 0.82, -reach, width * 0.97, -reach * 0.78);
         shape.lineTo(width, 0);
     } else {
         shape.absellipse(0, 0, width, reach, Math.PI, Math.PI * 2, false);
@@ -61,8 +62,8 @@ function visor(material, { reach = 1.55, width = 1.12, thickness = 0.07, tilt = 
     const geometry = new THREE.ExtrudeGeometry(shape, {
         depth: thickness,
         bevelEnabled: true,
-        bevelSize: thickness * 0.6,
-        bevelThickness: thickness * 0.5,
+        bevelSize: thickness * 0.35,
+        bevelThickness: thickness * 0.35,
         bevelSegments: 2,
         curveSegments: 48,
     });
@@ -70,9 +71,20 @@ function visor(material, { reach = 1.55, width = 1.12, thickness = 0.07, tilt = 
     // Shape's -y becomes +z (forward); extrusion depth becomes thickness.
     geometry.rotateX(-Math.PI / 2);
 
+    // A real bill curves down toward its tip rather than sticking out flat.
+    const position = geometry.attributes.position;
+    for (let i = 0; i < position.count; i += 1) {
+        const z = position.getZ(i);
+
+        position.setY(i, position.getY(i) - curve * z * z);
+    }
+    position.needsUpdate = true;
+    geometry.computeVertexNormals();
+
     const mesh = new THREE.Mesh(geometry, material);
     mesh.rotation.x = tilt;
-    mesh.position.y = 0.04;
+    // Tuck the straight back edge inside the crown so it never shows.
+    mesh.position.set(0, 0.02, -0.12);
 
     return mesh;
 }
@@ -113,7 +125,7 @@ function snapback(hex) {
     const group = new THREE.Group();
 
     group.add(crown(fabric(hex), { height: 0.9, depth: 1.16 }));
-    group.add(visor(fabric(hex, 0.7), { reach: 1.7, width: 1.2, tilt: 0.03, thickness: 0.08, squared: true }));
+    group.add(visor(fabric(hex, 0.7), { reach: 1.75, width: 1.06, tilt: 0.02, thickness: 0.07, curve: 0, squared: true }));
     group.add(sweatband(fabric(hex, 0.7)));
     group.add(button(fabric(hex, 1.15), 0.91));
 
@@ -137,7 +149,7 @@ function trucker(hex) {
     panels.scale.set(1, 0.86, 1.18);
     group.add(panels);
 
-    group.add(visor(fabric(hex, 0.68), { reach: 1.6, width: 1.16, tilt: 0.08, squared: true }));
+    group.add(visor(fabric(hex, 0.68), { reach: 1.65, width: 1.02, tilt: 0.14, curve: 0.03, squared: true }));
     group.add(sweatband(fabric(hex, 0.68)));
 
     return group;
