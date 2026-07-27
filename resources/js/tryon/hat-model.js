@@ -31,7 +31,7 @@ function fabric(hex, factor = 1) {
  * Dome of a cap/beanie. `height` stretches it vertically, `depth` front-to-back
  * (a skull is longer than it is wide).
  */
-function crown(material, { height = 0.78, depth = 1.2, segments = 48 } = {}) {
+function crown(material, { height = 0.7, depth = 1.2, segments = 48 } = {}) {
     const geometry = new THREE.SphereGeometry(1, segments, 32, 0, Math.PI * 2, 0, Math.PI / 2);
     const mesh = new THREE.Mesh(geometry, material);
 
@@ -116,7 +116,7 @@ function baseball(hex) {
     group.add(crown(fabric(hex)));
     group.add(visor(fabric(hex, 0.72)));
     group.add(sweatband(fabric(hex, 0.72)));
-    group.add(button(fabric(hex, 1.15), 0.79));
+    group.add(button(fabric(hex, 1.15), 0.71));
 
     return group;
 }
@@ -124,10 +124,10 @@ function baseball(hex) {
 function snapback(hex) {
     const group = new THREE.Group();
 
-    group.add(crown(fabric(hex), { height: 0.9, depth: 1.16 }));
+    group.add(crown(fabric(hex), { height: 0.82, depth: 1.16 }));
     group.add(visor(fabric(hex, 0.7), { reach: 1.75, width: 1.06, tilt: 0.02, thickness: 0.07, curve: 0, squared: true }));
     group.add(sweatband(fabric(hex, 0.7)));
-    group.add(button(fabric(hex, 1.15), 0.91));
+    group.add(button(fabric(hex, 1.15), 0.83));
 
     return group;
 }
@@ -135,7 +135,7 @@ function snapback(hex) {
 function trucker(hex) {
     const group = new THREE.Group();
 
-    group.add(crown(fabric(hex), { height: 0.86, depth: 1.18 }));
+    group.add(crown(fabric(hex), { height: 0.78, depth: 1.18 }));
 
     // Lighter mesh panels across the back half of the crown.
     const panels = new THREE.Mesh(
@@ -146,7 +146,7 @@ function trucker(hex) {
             side: THREE.DoubleSide,
         }),
     );
-    panels.scale.set(1, 0.86, 1.18);
+    panels.scale.set(1, 0.78, 1.18);
     group.add(panels);
 
     group.add(visor(fabric(hex, 0.68), { reach: 1.65, width: 1.02, tilt: 0.14, curve: 0.03, squared: true }));
@@ -158,7 +158,7 @@ function trucker(hex) {
 function beanie(hex) {
     const group = new THREE.Group();
 
-    group.add(crown(fabric(hex), { height: 1.02, depth: 1.1 }));
+    group.add(crown(fabric(hex), { height: 0.95, depth: 1.1 }));
 
     // Rolled cuff.
     const cuff = new THREE.Mesh(new THREE.TorusGeometry(1.01, 0.13, 14, 56), fabric(hex, 0.8));
@@ -168,7 +168,7 @@ function beanie(hex) {
     group.add(cuff);
 
     const pompom = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 20), fabric(hex, 1.35));
-    pompom.position.y = 1.06;
+    pompom.position.y = 0.99;
     group.add(pompom);
 
     return group;

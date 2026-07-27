@@ -133,9 +133,10 @@ function initTryOn(stage) {
 
         const { scale, offsetX, offsetY } = photoRect();
 
-        // Skull half-breadth, in stage pixels. The face oval is narrower than
-        // the skull it sits on, hence the widening factor.
-        const radius = (measurement.faceWidthPx * 1.12 * scale) / 2;
+        // Half-width of the *hat*, in stage pixels. Wider than the measured
+        // skull (HatSizingService.FACE_TO_SKULL_WIDTH) because a hat sits
+        // around the head, over the hair, rather than flush against bone.
+        const radius = (measurement.faceWidthPx * 1.3 * scale) / 2;
 
         state.placement = {
             x: offsetX + measurement.center.x * scale,
