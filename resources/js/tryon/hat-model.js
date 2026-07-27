@@ -66,7 +66,86 @@ function weave() {
     return weaveTexture;
 }
 
-function fabric(hex, factor = 1) {
+/**
+ * The seams and topstitching of a six-panel cap, drawn into a texture and
+ * multiplied over the crown's colour.
+ *
+ * A cap's crown is six panels sewn together, and the eye reads those seams
+ * before it reads the silhouette — a seamless dome looks like a bowl however
+ * well it's lit.
+ */
+let panelTexture = null;
+
+function panels() {
+    if (panelTexture) return panelTexture;
+
+    const width = 1024;
+    const height = 512;
+    const canvas = document.createElement('canvas');
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d');
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, width, height);
+
+    // Six meridian seams, each flanked by a row of topstitching.
+    for (let panel = 0; panel < 6; panel += 1) {
+        const x = (panel / 6) * width;
+
+        context.strokeStyle = 'rgba(0, 0, 0, 0.34)';
+        context.lineWidth = 3;
+        context.beginPath();
+        context.moveTo(x, 0);
+        context.lineTo(x, height);
+        context.stroke();
+
+        context.strokeStyle = 'rgba(0, 0, 0, 0.16)';
+        context.lineWidth = 2;
+        context.setLineDash([7, 6]);
+
+        for (const offset of [-9, 9]) {
+            context.beginPath();
+            context.moveTo(x + offset, 0);
+            context.lineTo(x + offset, height);
+            context.stroke();
+        }
+
+        context.setLineDash([]);
+    }
+
+    // Eyelets: one per panel, a little above the band.
+    context.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    for (let panel = 0; panel < 6; panel += 1) {
+        context.beginPath();
+        context.arc(((panel + 0.5) / 6) * width, height * 0.62, 5, 0, Math.PI * 2);
+        context.fill();
+    }
+
+    panelTexture = new THREE.CanvasTexture(canvas);
+    panelTexture.colorSpace = THREE.SRGBColorSpace;
+
+    return panelTexture;
+}
+
+function fabric(hex, factor = 1, { seams = false } = {}) {
+    if (seams) {
+        return new THREE.MeshPhysicalMaterial({
+            color: shade(hex, factor),
+            map: panels(),
+            roughness: 0.78,
+            metalness: 0,
+            normalMap: weave(),
+            normalScale: new THREE.Vector2(0.45, 0.45),
+            sheen: 0.55,
+            sheenRoughness: 0.85,
+            sheenColor: shade(hex, 1.5),
+            envMapIntensity: 0.75,
+        });
+    }
+
     return new THREE.MeshPhysicalMaterial({
         color: shade(hex, factor),
         roughness: 0.78,
@@ -99,7 +178,7 @@ function crown(material, { height = 0.7, depth = 1.2, segments = 48 } = {}) {
  * A visor: half an ellipse extruded into a slab, laid flat and tilted down
  * at the front.
  */
-function visor(material, { reach = 1.7, width = 1.0, thickness = 0.05, tilt = 0.3, curve = 0.075, squared = false } = {}) {
+function visor(material, { reach = 1.7, width = 1.0, thickness = 0.05, tilt = 0.3, curve = 0.075, squared = false, underside = null } = {}) {
     const shape = new THREE.Shape();
 
     if (squared) {
@@ -137,6 +216,17 @@ function visor(material, { reach = 1.7, width = 1.0, thickness = 0.05, tilt = 0.
     geometry.computeVertexNormals();
 
     const mesh = new THREE.Mesh(geometry, material);
+
+    // Caps are almost always made with a contrasting darker under-brim, and
+    // it's the part you actually see once the hat is on someone's head.
+    if (underside) {
+        const lining = new THREE.Mesh(geometry, underside);
+
+        lining.scale.set(0.985, 1, 0.985);
+        lining.position.y = -thickness * 0.55;
+        mesh.add(lining);
+    }
+
     mesh.rotation.x = tilt;
 
     // Tilting about the crown's centre would sink the bill through the
@@ -172,8 +262,8 @@ function button(material, height) {
 function baseball(hex) {
     const group = new THREE.Group();
 
-    group.add(crown(fabric(hex)));
-    group.add(visor(fabric(hex, 0.72)));
+    group.add(crown(fabric(hex, 1, { seams: true })));
+    group.add(visor(fabric(hex, 0.72), { underside: fabric(hex, 0.42) }));
     group.add(sweatband(fabric(hex, 0.72)));
     group.add(button(fabric(hex, 1.15), 0.71));
 
@@ -183,7 +273,7 @@ function baseball(hex) {
 function snapback(hex) {
     const group = new THREE.Group();
 
-    group.add(crown(fabric(hex), { height: 0.82, depth: 1.16 }));
+    group.add(crown(fabric(hex, 1, { seams: true }), { height: 0.82, depth: 1.16 }));
     group.add(visor(fabric(hex, 0.7), { reach: 1.75, width: 1.06, tilt: 0.02, thickness: 0.07, curve: 0, squared: true }));
     group.add(sweatband(fabric(hex, 0.7)));
     group.add(button(fabric(hex, 1.15), 0.83));
@@ -194,7 +284,7 @@ function snapback(hex) {
 function trucker(hex) {
     const group = new THREE.Group();
 
-    group.add(crown(fabric(hex), { height: 0.78, depth: 1.18 }));
+    group.add(crown(fabric(hex, 1, { seams: true }), { height: 0.78, depth: 1.18 }));
 
     // Lighter mesh panels across the back half of the crown.
     const panels = new THREE.Mesh(
