@@ -19,16 +19,18 @@ class DesignFile extends Model
     use HasFactory;
 
     /**
-     * Normalize the binary `data` column on read.
-     *
-     * Some PDO drivers (notably pgsql) hand back bytea columns as a stream
-     * resource rather than a string; flatten that to a string so callers
-     * can always treat `data` as raw bytes.
+     * The image is stored base64-encoded in a text column: PDO can't bind
+     * raw binary into Postgres bytea as a plain string parameter (fails
+     * UTF-8 validation), and base64 text is portable across pgsql/sqlite.
+     * Callers still read/write raw bytes — encoding is transparent here.
      */
     protected function data(): Attribute
     {
         return Attribute::make(
-            get: fn (mixed $value) => is_resource($value) ? stream_get_contents($value) : $value,
+            get: fn (mixed $value) => $value === null ? null : base64_decode(
+                is_resource($value) ? stream_get_contents($value) : $value
+            ),
+            set: fn (mixed $value) => $value === null ? null : base64_encode($value),
         );
     }
 }
