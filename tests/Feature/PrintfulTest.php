@@ -40,11 +40,30 @@ class PrintfulTest extends TestCase
         $this->assertEquals($binary, $publicResponse->getContent());
     }
 
+    /**
+     * Minimal printfiles payload used by mockup tests: variant 4011 supports
+     * embroidery_front_large whose print area is 1770x600.
+     */
+    private function fakePrintfilesResponse(): \GuzzleHttp\Promise\PromiseInterface
+    {
+        return Http::response([
+            'result' => [
+                'variant_printfiles' => [
+                    ['variant_id' => 4011, 'placements' => ['embroidery_front_large' => 522]],
+                ],
+                'printfiles' => [
+                    ['printfile_id' => 522, 'width' => 1770, 'height' => 600],
+                ],
+            ],
+        ], 200);
+    }
+
     public function test_mockup_endpoint_creates_task_and_updates_hat(): void
     {
         config(['services.printful.key' => 'test-key']);
 
         Http::fake([
+            'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
             'api.printful.com/mockup-generator/create-task/*' => Http::response([
                 'result' => ['task_key' => 'abc123'],
             ], 200),
@@ -76,11 +95,52 @@ class PrintfulTest extends TestCase
         });
     }
 
+    public function test_mockup_task_uses_product_placement_and_position_from_printfiles(): void
+    {
+        config(['services.printful.key' => 'test-key']);
+
+        Http::fake([
+            'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
+            'api.printful.com/mockup-generator/create-task/*' => Http::response([
+                'result' => ['task_key' => 'abc123'],
+            ], 200),
+        ]);
+
+        $hat = Hat::factory()->create();
+        $designFile = DesignFile::factory()->create();
+
+        $this->postJson("/api/hats/{$hat->id}/mockup", [
+            'printful_product_id' => 206,
+            'printful_variant_id' => 4011,
+            'design_file_id' => $designFile->id,
+        ])->assertStatus(200);
+
+        // Printful rejects tasks without a position, and each product dictates
+        // its own placements — both must come from the printfiles lookup.
+        Http::assertSent(function ($request) {
+            if (! str_contains($request->url(), '/mockup-generator/create-task/')) {
+                return false;
+            }
+
+            $file = $request['files'][0] ?? [];
+            $position = $file['position'] ?? [];
+
+            return ($file['placement'] ?? null) === 'embroidery_front_large'
+                && $position['area_width'] === 1770
+                && $position['area_height'] === 600
+                && $position['width'] === 600
+                && $position['height'] === 600
+                && $position['left'] === 585
+                && $position['top'] === 0;
+        });
+    }
+
     public function test_mockup_endpoint_surfaces_printful_error_detail(): void
     {
         config(['services.printful.key' => 'test-key']);
 
         Http::fake([
+            'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
             'api.printful.com/mockup-generator/create-task/*' => Http::response([
                 'code' => 400,
                 'result' => 'This endpoint requires `store_id`!',
@@ -110,6 +170,7 @@ class PrintfulTest extends TestCase
         config(['services.printful.store_id' => '12345678']);
 
         Http::fake([
+            'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
             'api.printful.com/mockup-generator/create-task/*' => Http::response([
                 'result' => ['task_key' => 'abc123'],
             ], 200),
@@ -197,6 +258,7 @@ class PrintfulTest extends TestCase
         config(['services.printful.key' => 'test-key']);
 
         Http::fake([
+            'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
             'api.printful.com/mockup-generator/create-task/*' => Http::response(['error' => 'server error'], 500),
         ]);
 

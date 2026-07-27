@@ -87,14 +87,18 @@ class PrintfulService
     /**
      * Kick off an async mockup-generation task for a product/variant + design
      * image. Returns the Printful task key, or null on failure.
+     *
+     * Each product dictates its own placements (e.g. the Adidas Dad Hat has
+     * embroidery_front_large, not embroidery_front) and rejects tasks without
+     * a position, so both are resolved from the product's printfiles first.
      */
-    public function createMockupTask(int $productId, array $variantIds, string $imageUrl, string $placement = 'embroidery_front'): ?string
+    public function createMockupTask(int $productId, array $variantIds, string $imageUrl, ?string $placement = null): ?string
     {
         $response = $this->post("/mockup-generator/create-task/{$productId}", [
             'variant_ids' => $variantIds,
             'format' => 'jpg',
             'files' => [
-                ['placement' => $placement, 'image_url' => $imageUrl],
+                $this->buildMockupFile($productId, $variantIds[0] ?? null, $imageUrl, $placement),
             ],
         ]);
 
@@ -105,6 +109,67 @@ class PrintfulService
         $taskKey = $response->json('result.task_key');
 
         return is_string($taskKey) && $taskKey !== '' ? $taskKey : null;
+    }
+
+    /**
+     * Resolve the placement + centered position for a mockup file from the
+     * product's printfiles. Falls back to a bare placement (letting Printful
+     * report a detailed error) if the printfiles lookup fails.
+     *
+     * @return array<string, mixed>
+     */
+    protected function buildMockupFile(int $productId, ?int $variantId, string $imageUrl, ?string $requested): array
+    {
+        $fallback = ['placement' => $requested ?? 'embroidery_front', 'image_url' => $imageUrl];
+
+        $response = $this->get("/mockup-generator/printfiles/{$productId}");
+
+        if ($response === null) {
+            return $fallback;
+        }
+
+        $result = $response->json('result');
+
+        if (! is_array($result)) {
+            return $fallback;
+        }
+
+        $variantPrintfiles = collect($result['variant_printfiles'] ?? []);
+        $entry = $variantPrintfiles->firstWhere('variant_id', $variantId) ?? $variantPrintfiles->first();
+        $placements = $entry['placements'] ?? [];
+
+        if ($placements === []) {
+            return $fallback;
+        }
+
+        $placement = $requested !== null && isset($placements[$requested])
+            ? $requested
+            : (collect(array_keys($placements))->first(fn ($p) => str_starts_with($p, 'embroidery_front'))
+                ?? array_key_first($placements));
+
+        $printfile = collect($result['printfiles'] ?? [])->firstWhere('printfile_id', $placements[$placement]);
+
+        if (! is_array($printfile)) {
+            return ['placement' => $placement, 'image_url' => $imageUrl];
+        }
+
+        $areaWidth = (int) $printfile['width'];
+        $areaHeight = (int) $printfile['height'];
+        $side = min($areaWidth, $areaHeight);
+
+        return [
+            'placement' => $placement,
+            'image_url' => $imageUrl,
+            // Center the (square-fitted) design inside the print area.
+            'position' => [
+                'area_width' => $areaWidth,
+                'area_height' => $areaHeight,
+                'width' => $side,
+                'height' => $side,
+                'top' => intdiv($areaHeight - $side, 2),
+                'left' => intdiv($areaWidth - $side, 2),
+            ],
+        ];
     }
 
     /**
