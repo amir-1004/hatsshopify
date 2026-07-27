@@ -24,6 +24,14 @@ class PrintfulService
     /** "All hats" category id in Printful's catalog (verified via GET /categories). */
     protected const HEADWEAR_CATEGORY_ID = 15;
 
+    /** Human-readable detail of the most recent failure, for API responses. */
+    protected ?string $lastError = null;
+
+    public function lastError(): ?string
+    {
+        return $this->lastError;
+    }
+
     /**
      * Curated headwear catalog, cached for 1 hour.
      *
@@ -173,9 +181,13 @@ class PrintfulService
      */
     protected function send(string $method, string $path, array $payload): ?Response
     {
+        $this->lastError = null;
+
         $apiKey = config('services.printful.key');
 
         if (empty($apiKey)) {
+            $this->lastError = 'PRINTFUL_API_KEY is not configured on the server.';
+
             return null;
         }
 
@@ -191,10 +203,23 @@ class PrintfulService
             $response = $request->{$method}(self::BASE_URL.$path, $payload);
 
             if ($response->failed()) {
+                $detail = $response->json('error.message');
+
+                if (! is_string($detail) || $detail === '') {
+                    $result = $response->json('result');
+                    $detail = is_string($result) && $result !== ''
+                        ? $result
+                        : "Printful API error (HTTP {$response->status()})";
+                }
+
+                $this->lastError = $detail;
+
                 Log::warning('Printful API request failed.', [
                     'method' => $method,
                     'path' => $path,
                     'status' => $response->status(),
+                    'detail' => $detail,
+                    'body' => mb_substr($response->body(), 0, 500),
                 ]);
 
                 return null;
@@ -202,6 +227,8 @@ class PrintfulService
 
             return $response;
         } catch (Throwable $e) {
+            $this->lastError = 'Could not reach Printful: '.$e->getMessage();
+
             Log::warning('Printful API request threw an exception.', [
                 'method' => $method,
                 'path' => $path,

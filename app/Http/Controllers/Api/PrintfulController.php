@@ -80,7 +80,7 @@ class PrintfulController extends Controller
 
         if ($taskKey === null) {
             return response()->json([
-                'error' => 'Could not start mockup generation. Please try again shortly.',
+                'error' => $this->detailedError($printful, 'Could not start mockup generation.'),
             ], 422);
         }
 
@@ -167,7 +167,7 @@ class PrintfulController extends Controller
 
         if ($result === null) {
             return response()->json([
-                'error' => 'Could not create the supplier order. Please try again shortly.',
+                'error' => $this->detailedError($printful, 'Could not create the supplier order.'),
             ], 422);
         }
 
@@ -175,5 +175,28 @@ class PrintfulController extends Controller
             'order' => $result,
             'note' => 'Draft order created — confirm & pay in your Printful dashboard.',
         ]);
+    }
+
+    /**
+     * Build a client-facing error that includes Printful's own message, plus
+     * an actionable hint for the common "no store connected" case.
+     */
+    protected function detailedError(PrintfulService $printful, string $fallback): string
+    {
+        $detail = $printful->lastError();
+
+        if ($detail === null) {
+            return $fallback;
+        }
+
+        $error = "{$fallback} Printful said: {$detail}";
+
+        if (str_contains($detail, 'store_id')) {
+            $error .= ' — Your Printful account needs a store: create one under'
+                .' Stores → Add store → "Manual order platform / API", then set'
+                .' PRINTFUL_STORE_ID on the server.';
+        }
+
+        return $error;
     }
 }

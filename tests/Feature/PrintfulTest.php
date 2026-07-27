@@ -76,6 +76,90 @@ class PrintfulTest extends TestCase
         });
     }
 
+    public function test_mockup_endpoint_surfaces_printful_error_detail(): void
+    {
+        config(['services.printful.key' => 'test-key']);
+
+        Http::fake([
+            'api.printful.com/mockup-generator/create-task/*' => Http::response([
+                'code' => 400,
+                'result' => 'This endpoint requires `store_id`!',
+                'error' => ['reason' => 'BadRequest', 'message' => 'This endpoint requires `store_id`!'],
+            ], 400),
+        ]);
+
+        $hat = Hat::factory()->create();
+        $designFile = DesignFile::factory()->create();
+
+        $response = $this->postJson("/api/hats/{$hat->id}/mockup", [
+            'printful_product_id' => 206,
+            'printful_variant_id' => 4011,
+            'design_file_id' => $designFile->id,
+        ]);
+
+        $response->assertStatus(422);
+        // The real Printful message must reach the client, not a generic
+        // "try again" — plus an actionable hint for the store_id case.
+        $this->assertStringContainsString('store_id', $response->json('error'));
+        $this->assertStringContainsString('PRINTFUL_STORE_ID', $response->json('error'));
+    }
+
+    public function test_printful_requests_send_store_id_header_when_configured(): void
+    {
+        config(['services.printful.key' => 'test-key']);
+        config(['services.printful.store_id' => '12345678']);
+
+        Http::fake([
+            'api.printful.com/mockup-generator/create-task/*' => Http::response([
+                'result' => ['task_key' => 'abc123'],
+            ], 200),
+        ]);
+
+        $hat = Hat::factory()->create();
+        $designFile = DesignFile::factory()->create();
+
+        $this->postJson("/api/hats/{$hat->id}/mockup", [
+            'printful_product_id' => 206,
+            'printful_variant_id' => 4011,
+            'design_file_id' => $designFile->id,
+        ])->assertStatus(200);
+
+        Http::assertSent(fn ($request) => $request->hasHeader('X-PF-Store-Id', '12345678'));
+    }
+
+    public function test_supplier_order_surfaces_printful_error_detail(): void
+    {
+        config(['services.printful.key' => 'test-key']);
+
+        Http::fake([
+            'api.printful.com/orders' => Http::response([
+                'code' => 400,
+                'result' => 'Invalid recipient country code',
+                'error' => ['reason' => 'BadRequest', 'message' => 'Invalid recipient country code'],
+            ], 400),
+        ]);
+
+        $designFile = DesignFile::factory()->create();
+        $hat = Hat::factory()->create([
+            'printful_variant_id' => 4011,
+            'design_file_id' => $designFile->id,
+        ]);
+
+        $response = $this->postJson("/api/hats/{$hat->id}/supplier-order", [
+            'recipient' => [
+                'name' => 'Amir L',
+                'address1' => 'Herzl 1',
+                'city' => 'Tel Aviv',
+                'country_code' => 'XX',
+                'zip' => '6100000',
+            ],
+            'quantity' => 1,
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertStringContainsString('Invalid recipient country code', $response->json('error'));
+    }
+
     public function test_mockup_task_completed_saves_mockup_urls_on_hat(): void
     {
         config(['services.printful.key' => 'test-key']);
