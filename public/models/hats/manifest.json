@@ -1,0 +1,4 @@
+{
+  "_comment": "Photoreal hat models, authored once from each hat's own product photo and committed. Empty until the models land; every style listed here needs a matching .glb in this directory. Anything missing falls back to the procedural hat, so this file is safe to leave empty.",
+  "_calibration": "Per style: file (required), rotation [x,y,z] radians applied first, scale multiplier after width-normalisation, offset [x,y,z] in crown radii applied last. Convention: crown radius 1, band on y=0, bill pointing +z."
+}

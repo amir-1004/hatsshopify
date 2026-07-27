@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { detectFace, measureFace } from './tryon/face.js';
 import { buildHat } from './tryon/hat-model.js';
+import { loadHatAsset } from './tryon/hat-asset.js';
 import { buildHeadMesh } from './tryon/head-mesh.js';
 
 // Portraits are shot on long lenses, and the virtual camera has to agree
@@ -82,7 +83,7 @@ function initTryOn(stage) {
         };
     }
 
-    function swapHat() {
+    async function swapHat() {
         const hat = currentHat();
 
         if (el.hatImage) {
@@ -90,8 +91,24 @@ function initTryOn(stage) {
             el.hatImage.alt = hat ? `${hat.style} hat` : '';
         }
 
-        view.setHat(hat ? buildHat(hat.style, hat.hex) : null);
+        if (!hat) {
+            view.setHat(null);
+            applyTransforms();
+            return;
+        }
+
+        // Procedural first so something is on screen immediately, then swap in
+        // the photoreal model if this style has one.
+        view.setHat(buildHat(hat.style, hat.hex));
         applyTransforms();
+
+        const asset = await loadHatAsset(hat.style);
+
+        // Guard against the shopper changing hats while the model downloaded.
+        if (asset && currentHat()?.style === hat.style) {
+            view.setHat(asset);
+            applyTransforms();
+        }
     }
 
     el.hatSelect?.addEventListener('change', () => {
