@@ -246,7 +246,7 @@ export function buildHeadMesh(landmarks, image, worldWidth, worldHeight) {
 
     const bandOffset = new THREE.Vector3()
         .addScaledVector(forward, -radius * 0.35)
-        .addScaledVector(up, hairlineHeight - radius * 0.15);
+        .addScaledVector(up, hairlineHeight - radius * 0.45);
 
     return { group, center, radius, basis, bandOffset };
 }

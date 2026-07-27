@@ -567,6 +567,14 @@ function createScene(canvas) {
     let height = 1;
     let previewSpin = null;
 
+    const ORIGIN = new THREE.Vector3(0, 0, 0);
+    const anchor = new THREE.Vector3(); // where the head sits in the photo
+
+    // How far the model has been turned away from the photo, 0..1 — the same
+    // ramp the flat photo fades on.
+    const turnedFraction = (orbit) =>
+        Math.min(1, (Math.abs(orbit.yaw) + Math.abs(orbit.pitch)) / 0.1);
+
     function resize() {
         const stage = canvas.parentElement;
 
@@ -595,10 +603,12 @@ function createScene(canvas) {
 
         if (head) {
             headGroup.add(head);
-            headGroup.position.copy(center);
+            anchor.copy(center);
         } else {
-            headGroup.position.set(0, 0, 0);
+            anchor.set(0, 0, 0);
         }
+
+        headGroup.position.copy(anchor);
 
         render();
     }
@@ -624,6 +634,12 @@ function createScene(canvas) {
     function apply(orbit, fit, nudge) {
         headGroup.rotation.set(orbit.pitch, orbit.yaw, 0, 'YXZ');
         headGroup.scale.setScalar(orbit.zoom);
+
+        // While the flat photo is still showing, the head has to stay exactly
+        // where it is in that photo. Once the model turns and the photo goes,
+        // there's nothing to line up with — so it drifts to the middle of the
+        // stage, where there's room to zoom into it.
+        headGroup.position.copy(anchor).lerp(ORIGIN, turnedFraction(orbit));
 
         if (hat) {
             if (fit) {
