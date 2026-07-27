@@ -83,8 +83,12 @@ function visor(material, { reach = 1.7, width = 1.0, thickness = 0.05, tilt = 0.
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.rotation.x = tilt;
-    // Tuck the straight back edge inside the crown so it never shows.
-    mesh.position.set(0, 0.02, -0.12);
+
+    // Tilting about the crown's centre would sink the bill through the
+    // wearer's face by the time it reached the tip. A real bill hinges where
+    // it meets the band, so lift it back up by the drop it accumulates over
+    // the crown's own radius; only the part beyond the crown droops.
+    mesh.position.set(0, 0.02 + Math.sin(tilt) * 0.85, -0.12);
 
     return mesh;
 }
