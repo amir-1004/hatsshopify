@@ -20,3 +20,11 @@ Route::get('/design-files/{designFile}', [DesignFileController::class, 'show'])-
 
 Route::post('/webhook/shopify/orders-create', [ShopifyWebhookController::class, 'ordersCreate'])
     ->middleware(VerifyShopifyWebhook::class);
+
+// Browsers (and curious humans) send GET — answer with an explanation
+// instead of a bare framework error page.
+Route::get('/webhook/shopify/orders-create', fn () => response()->json([
+    'message' => 'This is the Shopify orders/create webhook endpoint. It only accepts '
+        .'POST requests signed by Shopify (X-Shopify-Hmac-SHA256) — seeing this '
+        .'message in a browser is expected.',
+], 405));

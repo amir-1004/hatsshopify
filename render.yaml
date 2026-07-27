@@ -3,6 +3,8 @@ services:
     name: hatsshopify
     runtime: docker
     plan: free
+    # Deploy only after GitHub checks (tests + http-smoke) pass.
+    autoDeployTrigger: checksPass
     healthCheckPath: /up
     envVars:
       - key: APP_ENV

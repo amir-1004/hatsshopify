@@ -30,8 +30,72 @@ jobs:
           DB_CONNECTION: sqlite
           DB_DATABASE: database/database.sqlite
 
+  http-smoke:
+    # Boots the real HTTP app (built assets, migrations, seeds) and asserts
+    # status codes on every critical route — catches 500s, missing views,
+    # broken Vite builds, and method regressions before production.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, sqlite3, pdo_sqlite
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build frontend assets
+        run: |
+          npm install
+          npm run build
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Boot application
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          touch database/database.sqlite
+          php artisan migrate --force
+          php artisan db:seed --force
+          php artisan serve --port 8000 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/up >/dev/null && break
+            sleep 1
+          done
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/database.sqlite
+          SHOPIFY_WEBHOOK_SECRET: ci-smoke-secret
+
+      - name: Smoke-test critical routes
+        run: |
+          check() {
+            actual=$(curl -s -o /dev/null -w '%{http_code}' -X "$1" "http://127.0.0.1:8000$2")
+            if [ "$actual" != "$3" ]; then
+              echo "FAIL: $1 $2 expected $3 got $actual"; exit 1
+            fi
+            echo "ok: $1 $2 -> $actual"
+          }
+          check GET  /up 200
+          check GET  / 302
+          check GET  /dashboard 200
+          check GET  /studio 200
+          check GET  /api/hats 200
+          check GET  /api/orders 200
+          check GET  /webhook/shopify/orders-create 405
+          check POST /webhook/shopify/orders-create 401
+          check GET  /api/printful/products 200
+
   deploy:
-    needs: tests
+    needs: [tests, http-smoke]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

@@ -68,6 +68,16 @@ class ShopifyWebhookTest extends TestCase
         return $this->call('POST', $this->endpoint, [], [], [], $headers, $body);
     }
 
+    public function test_visiting_webhook_url_in_a_browser_returns_explanatory_405_json(): void
+    {
+        $response = $this->get($this->endpoint, ['Accept' => 'text/html']);
+
+        $response->assertStatus(405);
+        $response->assertJson(fn ($json) => $json->whereType('message', 'string')->etc());
+        $this->assertStringContainsString('POST', $response->json('message'));
+        $this->assertStringContainsString('Shopify', $response->json('message'));
+    }
+
     public function test_valid_hmac_signature_returns_200_and_persists_order(): void
     {
         $payload = $this->samplePayload();
