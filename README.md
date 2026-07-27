@@ -28,7 +28,16 @@ Design Studio (real hat mockups + draft supplier orders).
   keyed on `shopify_order_id` (Shopify retries webhooks, so duplicates must be
   safe).
 - **Hat catalog** — simple CRUD for the products being sold (name, color,
-  style, price, description), with an optional AI-generated description.
+  style, size, price, description), with an optional AI-generated description.
+  Every hat **must** carry an image: `hats.image_url` is `NOT NULL`, rejected
+  when blank by the API, and a merchant can satisfy it by pasting a URL,
+  uploading a photo, or generating artwork (see below).
+- **Generated hat artwork** — `GET /hat-art/{style}?color=…` draws the hat as
+  an SVG from its own style and color, so a product is never imageless. It's
+  what the seeder and the not-null backfill migration point at.
+- **Virtual try-on** — `/try-on/{hat?}`: the shopper gives it a photo, the
+  browser finds their face, measures their skull, and puts a 3D hat on their
+  head that they can rotate, move, and resize with the mouse (see below).
 - **Order-to-hat linking** — incoming orders are matched to a hat by
   case-insensitive line-item title; unmatched orders are kept with a null
   `hat_id` rather than dropped.
@@ -79,6 +88,9 @@ degrades to `null` (description) or a deterministic stats-based summary
 | `PUT` | `/api/hats/{hat}` | Partial update (all fields `sometimes`) |
 | `DELETE` | `/api/hats/{hat}` | Delete a hat (204) |
 | `POST` | `/api/hats/generate-description` | AI-generate a description from `{name, color, style}` |
+| `POST` | `/api/try-on/recommend` | Head measurements in (pixels or cm), hat size out. No image data |
+| `GET` | `/hat-art/{style}?color=` | Generated hat artwork as SVG |
+| `GET` | `/try-on/{hat?}` | Virtual try-on page, optionally pre-selecting a hat |
 | `GET` | `/api/orders` | Paginated order list (20/page), latest first, with `hat` eager-loaded |
 | `GET` | `/api/orders/{order}` | Show an order, with `hat` eager-loaded |
 | `GET` | `/api/orders/insights` | AI (or fallback) merchant summary of order trends, cached 10 min |
@@ -163,6 +175,53 @@ the *absence* of a `confirm` key).
 |---|---|
 | `PRINTFUL_API_KEY` | Printful API key (`Authorization: Bearer`). If unset, catalog/mockup/order calls degrade gracefully — the catalog falls back to a hardcoded shortlist, and mockup/order actions return a `422` rather than crashing |
 
+## Virtual try-on (3D)
+
+`/try-on` answers the question a hat shop can't otherwise answer online:
+*will this actually fit my head, and what do I look like in it?*
+
+```
+photo (never leaves the browser)
+   │
+   ├─ MediaPipe FaceLandmarker (WASM, in-page) ─► 478 face landmarks
+   │        │
+   │        ├─ eye distance in px  ─┐
+   │        └─ face width in px    ─┤
+   │                                ▼
+   │                    POST /api/try-on/recommend   ← two numbers, no image
+   │                                │
+   │                    HatSizingService (server)
+   │                      IPD 63 mm = the ruler → mm per pixel
+   │                      face width × 1.12     → skull breadth
+   │                      breadth ÷ 0.78        → skull depth (cephalic index)
+   │                      Ramanujan ellipse     → head circumference (cm)
+   │                      circumference         → XS / S / M / L / XL + fit note
+   │
+   └─ Three.js ─► procedural 3D hat (crown, visor, band per style), scaled to
+                  the measured skull, anchored on the forehead landmark,
+                  rotated to the head's roll/yaw/pitch — then draggable
+                  (rotate), shift-draggable (move), and scrollable (resize).
+```
+
+Design notes worth saying out loud in an interview:
+
+- **The photo never leaves the device.** Face detection is WASM running in the
+  page; only two scalar pixel measurements are POSTed. There is no endpoint
+  that accepts an image of a person, so there's nothing to leak or store.
+- **The geometry lives on the server**, in `App\Services\HatSizingService`, so
+  the sizing table is unit-tested and can't drift between the try-on page and
+  anything else that needs a size (`tests/Unit/HatSizingServiceTest.php`).
+- **It degrades.** No WebGL, no camera, CDN blocked, or no face found — the
+  page falls back to a manual centimetre slider and a hat you position
+  yourself. Nothing about the page hard-fails.
+- **The scan is deliberately visible** — the landmark cloud lights up under a
+  sweeping band before the measurement lines are drawn, so the shopper can
+  see what was measured rather than being handed a number.
+
+MediaPipe's library and model are pulled from a CDN on first use, so they cost
+nothing in the app bundle; Three.js is bundled by Vite into a chunk that only
+the try-on page loads.
+
 ## Local-free workflow note
 
 This repository is developed without running `php`, `composer`, `npm`, or
@@ -201,6 +260,8 @@ Frontend assets (Tailwind v4 + daisyUI via `@plugin "daisyui"` in
 - **קישור הזמנה→כובע** — הזמנה נכנסת משודכת לכובע לפי שם הפריט (ללא תלות ברישיות); הזמנה ללא התאמה נשמרת עם `hat_id` ריק ולא נזרקת.
 - **דשבורד** — כרטיסי סטטיסטיקה, פאנל תובנות AI, טבלת הזמנות אחרונות וניהול הקטלוג — הכול Blade + Tailwind v4 + daisyUI עם JavaScript ונילי בלבד (בלי SPA).
 - **סטודיו עיצוב (Printful)** — בחירת דגם כובע אמיתי מהקטלוג, העלאת לוגו או עיצוב טקסט על קנבס, יצירת הדמיה פוטוריאליסטית של הכובע עם העיצוב, ויצירת הזמנת טיוטה אצל הספק.
+- **תמונה חובה לכל כובע** — לכל מוצר חייבת להיות תמונה: העמודה `image_url` היא `NOT NULL`, וה־API דוחה ערך ריק (גם רווחים בלבד). אפשר להדביק כתובת, להעלות תמונה, או ללחוץ "Use generated art" — הדמיה וקטורית (SVG) שנוצרת בשרת לפי הסגנון והצבע של הכובע עצמו.
+- **מדידה ותצוגה תלת־ממדית (Virtual Try-On)** — מעלים תמונת פנים, הדפדפן מזהה 478 נקודות ציון על הפנים, מודד את רוחב הגולגולת ומחשב היקף ראש בסנטימטרים והמלצת מידה — ואז מציב כובע תלת־ממדי אמיתי על הראש שאפשר לסובב, להזיז ולהגדיל עם העכבר. **התמונה לעולם לא עוזבת את המכשיר** — רק שני מספרים (מרחק בין האישונים ורוחב הפנים, בפיקסלים) נשלחים לשרת לצורך חישוב המידה.
 
 ## איך מדגימים (Demo)
 
@@ -209,5 +270,6 @@ Frontend assets (Tailwind v4 + daisyUI via `@plugin "daisyui"` in
 3. יוצרים הזמנת בדיקה בחנות הפיתוח של Shopify → ההזמנה מופיעה בדשבורד עם הכובע המקושר.
 4. לוחצים "Generate insights" → סיכום מגמות כתוב על ידי Claude.
 5. בסטודיו: בוחרים דגם, מעצבים, מייצרים הדמיה אמיתית → "Order from supplier" → טיוטה בחשבון Printful.
+6. לוחצים "🪞 Try it on" על כרטיס כובע → מעלים תמונת פנים (או מצלמים במצלמה) → רואים את סריקת הפנים, את היקף הראש והמידה המומלצת, ואת הכובע התלת־ממדי על הראש.
 
 </div>

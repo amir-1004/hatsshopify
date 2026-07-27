@@ -37,6 +37,7 @@ class HatApiTest extends TestCase
             'style' => 'Baseball',
             'size' => 'L',
             'price' => 59.90,
+            'image_url' => '/hat-art/Baseball?color=Black',
         ]);
 
         $response->assertStatus(201);
@@ -51,6 +52,7 @@ class HatApiTest extends TestCase
             'color' => 'Blue',
             'style' => 'Snapback',
             'price' => 49.90,
+            'image_url' => '/hat-art/Snapback?color=Blue',
         ]);
 
         $response->assertStatus(201);
@@ -65,6 +67,7 @@ class HatApiTest extends TestCase
             'style' => 'Beanie',
             'size' => 'XXXL-giant',
             'price' => 49.90,
+            'image_url' => '/hat-art/Beanie?color=Green',
         ]);
 
         $response->assertStatus(422);
@@ -110,6 +113,7 @@ class HatApiTest extends TestCase
             'color' => 'Orange',
             'style' => 'Trucker',
             'price' => 49.99,
+            'image_url' => 'https://example.com/hat.png',
         ];
 
         $response = $this->postJson('/api/hats', $payload);
@@ -125,6 +129,7 @@ class HatApiTest extends TestCase
             'color' => 'Orange',
             'style' => 'Trucker',
             'price' => -10,
+            'image_url' => 'https://example.com/hat.png',
         ];
 
         $response = $this->postJson('/api/hats', $payload);

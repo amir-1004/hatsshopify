@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Hat;
+use App\Rules\HatImage;
 use App\Services\ClaudeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,9 +31,11 @@ class HatController extends Controller
             'style' => ['required', 'string', 'max:100'],
             'size' => ['sometimes', 'required', Rule::in(Hat::SIZES)],
             'description' => ['nullable', 'string'],
-            'image_url' => ['nullable', 'url'],
+            'image_url' => ['required', 'string', 'max:2048', new HatImage],
             'price' => ['required', 'numeric', 'min:0'],
         ]);
+
+        $validated['image_url'] = trim($validated['image_url']);
 
         $hat = Hat::create($validated);
 
@@ -59,9 +62,13 @@ class HatController extends Controller
             'style' => ['sometimes', 'required', 'string', 'max:100'],
             'size' => ['sometimes', 'required', Rule::in(Hat::SIZES)],
             'description' => ['sometimes', 'nullable', 'string'],
-            'image_url' => ['sometimes', 'nullable', 'url'],
+            'image_url' => ['sometimes', 'required', 'string', 'max:2048', new HatImage],
             'price' => ['sometimes', 'required', 'numeric', 'min:0'],
         ]);
+
+        if (isset($validated['image_url'])) {
+            $validated['image_url'] = trim($validated['image_url']);
+        }
 
         $hat->update($validated);
 

@@ -2,8 +2,10 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DesignFileController;
+use App\Http\Controllers\HatArtController;
 use App\Http\Controllers\ShopifyWebhookController;
 use App\Http\Controllers\StudioController;
+use App\Http\Controllers\TryOnController;
 use App\Http\Middleware\VerifyShopifyWebhook;
 use Illuminate\Support\Facades\Route;
 
@@ -14,6 +16,12 @@ Route::get('/', function () {
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
 Route::get('/studio', [StudioController::class, 'index'])->name('studio');
+
+// Generated hat artwork (SVG) so no hat product is ever without a picture.
+Route::get('/hat-art/{style}', [HatArtController::class, 'show'])->name('hat-art.show');
+
+// Virtual try-on. The optional {hat} pre-selects a hat from the catalog.
+Route::get('/try-on/{hat?}', [TryOnController::class, 'index'])->name('try-on');
 
 // Public so Printful's mockup generator / order API can fetch design bytes by URL.
 Route::get('/design-files/{designFile}', [DesignFileController::class, 'show'])->name('design-files.show');

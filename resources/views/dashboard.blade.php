@@ -7,7 +7,8 @@
         <div class="flex-1">
             <span class="text-xl font-semibold">🧢 HatShop — Shopify Order Listener</span>
         </div>
-        <div class="flex-none">
+        <div class="flex-none gap-2">
+            <a href="{{ route('try-on') }}" class="btn btn-sm btn-outline">🪞 Virtual try-on</a>
             <a href="{{ route('studio') }}" class="btn btn-sm btn-outline">🎨 Design Studio</a>
         </div>
     </div>
@@ -137,11 +138,10 @@
             <div id="hats-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 @forelse ($hats as $hat)
                     <div class="card bg-base-100 shadow" data-hat-card="{{ $hat->id }}">
-                        @if ($hat->image_url)
-                            <figure class="bg-base-200">
-                                <img src="{{ $hat->image_url }}" alt="{{ $hat->name }} mockup" class="h-40 w-full object-contain">
-                            </figure>
-                        @endif
+                        {{-- image_url is NOT NULL and validated non-blank, so this always renders. --}}
+                        <figure class="bg-base-200">
+                            <img src="{{ $hat->image_url }}" alt="{{ $hat->name }}" class="h-40 w-full object-contain">
+                        </figure>
                         <div class="card-body">
                             <div class="flex items-center gap-4">
                                 <span
@@ -157,6 +157,9 @@
                             <p class="font-semibold mt-2">${{ number_format($hat->price, 2) }}</p>
                             <p class="text-sm opacity-70 line-clamp-3">{{ $hat->description ?? 'No description yet.' }}</p>
                             <div class="card-actions justify-end mt-2">
+                                <a href="{{ route('try-on', ['hat' => $hat->id]) }}" class="btn btn-sm btn-secondary">
+                                    🪞 Try it on
+                                </a>
                                 <a href="{{ route('studio') }}?hat={{ $hat->id }}" class="btn btn-sm btn-outline">
                                     🎨 Design
                                 </a>
@@ -169,6 +172,7 @@
                                     data-style="{{ $hat->style }}"
                                     data-size="{{ $hat->size }}"
                                     data-price="{{ $hat->price }}"
+                                    data-image="{{ $hat->image_url }}"
                                     data-description="{{ $hat->description }}"
                                 >
                                     Edit
@@ -229,6 +233,39 @@
                 <div>
                     <label class="label" for="hat-price"><span class="label-text">Price</span></label>
                     <input type="number" id="hat-price" class="input input-bordered w-full" required min="0" step="0.01">
+                </div>
+
+                {{-- Required: a hat product without a picture of the hat isn't a product. --}}
+                <div>
+                    <label class="label" for="hat-image-url">
+                        <span class="label-text">Hat image <span class="text-error">*</span></span>
+                    </label>
+                    <div class="flex items-start gap-3">
+                        <div class="w-24 h-24 shrink-0 rounded-lg bg-base-200 grid place-items-center overflow-hidden">
+                            <img id="hat-image-preview" src="" alt="" class="w-full h-full object-contain hidden">
+                            <span id="hat-image-empty" class="text-3xl opacity-30">🧢</span>
+                        </div>
+                        <div class="flex-1 space-y-2">
+                            <input
+                                type="text"
+                                id="hat-image-url"
+                                class="input input-bordered w-full"
+                                required
+                                maxlength="2048"
+                                placeholder="https://… or upload a photo"
+                            >
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" id="hat-image-upload-btn" class="btn btn-xs btn-outline">
+                                    ⬆️ Upload photo
+                                </button>
+                                <button type="button" id="hat-image-generate-btn" class="btn btn-xs btn-outline">
+                                    🎨 Use generated art
+                                </button>
+                                <input type="file" id="hat-image-file" accept="image/*" class="hidden">
+                            </div>
+                            <p id="hat-image-note" class="hidden text-xs mt-1"></p>
+                        </div>
+                    </div>
                 </div>
 
                 <div>

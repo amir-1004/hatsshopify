@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Hat;
+use App\Services\HatArtService;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -29,7 +30,8 @@ class HatFactory extends Factory
             'style' => $style,
             'size' => fake()->randomElement(\App\Models\Hat::SIZES),
             'description' => fake()->sentence(12),
-            'image_url' => fake()->imageUrl(640, 480, 'fashion'),
+            // Never blank: image_url is NOT NULL and required by the API.
+            'image_url' => HatArtService::urlFor($style, $color),
             'price' => fake()->randomFloat(2, 15, 60),
         ];
     }

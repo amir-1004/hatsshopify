@@ -88,6 +88,10 @@ jobs:
           check GET  / 302
           check GET  /dashboard 200
           check GET  /studio 200
+          check GET  /try-on 200
+          check GET  /try-on/1 200
+          check GET  /try-on/999999 404
+          check GET  /hat-art/Baseball 200
           check GET  /api/hats 200
           check GET  /api/orders 200
           check GET  /webhook/shopify/orders-create 405

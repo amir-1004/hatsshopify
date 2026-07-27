@@ -71,10 +71,29 @@ function initHatModal() {
     const sizeField = document.getElementById('hat-size');
     const priceField = document.getElementById('hat-price');
     const descriptionField = document.getElementById('hat-description');
+    const imageField = document.getElementById('hat-image-url');
+    const imagePreview = document.getElementById('hat-image-preview');
+    const imageEmpty = document.getElementById('hat-image-empty');
+    const imageNote = document.getElementById('hat-image-note');
+    const imageFile = document.getElementById('hat-image-file');
     const formError = document.getElementById('hat-form-error');
     const aiNote = document.getElementById('ai-unavailable-note');
     const submitButton = document.getElementById('hat-form-submit');
     const generateButton = document.getElementById('generate-description-btn');
+
+    function setImage(url) {
+        imageField.value = url ?? '';
+        const hasImage = Boolean(imageField.value.trim());
+
+        imagePreview.src = hasImage ? imageField.value.trim() : '';
+        imagePreview.classList.toggle('hidden', !hasImage);
+        imageEmpty.classList.toggle('hidden', hasImage);
+    }
+
+    function showImageNote(message, tone = 'warning') {
+        imageNote.textContent = message;
+        imageNote.className = `text-xs mt-1 text-${tone}`;
+    }
 
     function resetForm() {
         form.reset();
@@ -82,6 +101,8 @@ function initHatModal() {
         formError.classList.add('hidden');
         formError.textContent = '';
         aiNote.classList.add('hidden');
+        imageNote.classList.add('hidden');
+        setImage('');
     }
 
     function openForCreate() {
@@ -100,6 +121,7 @@ function initHatModal() {
         sizeField.value = button.dataset.size ?? 'Universal';
         priceField.value = button.dataset.price ?? '';
         descriptionField.value = button.dataset.description ?? '';
+        setImage(button.dataset.image ?? '');
         modal.showModal();
     }
 
@@ -131,6 +153,58 @@ function initHatModal() {
     // while still allowing the merchant to type a plain color name by hand.
     colorPicker?.addEventListener('input', () => {
         colorNameField.value = colorPicker.value;
+    });
+
+    imageField.addEventListener('input', () => setImage(imageField.value));
+
+    // "Use generated art" — server-rendered SVG matching this hat's style
+    // and color, so a merchant without a photo still ships a real image.
+    document.getElementById('hat-image-generate-btn')?.addEventListener('click', () => {
+        const style = styleField.value || 'Baseball';
+        const color = colorNameField.value.trim() || colorPicker.value;
+
+        setImage(`/hat-art/${encodeURIComponent(style)}?color=${encodeURIComponent(color)}`);
+        imageNote.classList.add('hidden');
+    });
+
+    document.getElementById('hat-image-upload-btn')?.addEventListener('click', () => imageFile.click());
+
+    // Uploads reuse the design-file store: bytes live in the database
+    // (no persistent disk on Render) and come back out as a public URL.
+    imageFile.addEventListener('change', async () => {
+        const file = imageFile.files?.[0];
+        if (!file) return;
+
+        imageNote.classList.remove('hidden');
+        showImageNote('Uploading…', 'info');
+
+        const body = new FormData();
+        body.append('file', file);
+
+        try {
+            const response = await fetch('/api/design-files', {
+                method: 'POST',
+                headers: { Accept: 'application/json' },
+                body,
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.url) {
+                showImageNote(
+                    Object.values(data.errors ?? {}).flat().join(' ') || 'Upload failed — try another image.',
+                    'error',
+                );
+                return;
+            }
+
+            setImage(data.url);
+            showImageNote('Uploaded.', 'success');
+        } catch (error) {
+            showImageNote('Upload failed — check your connection.', 'error');
+        } finally {
+            imageFile.value = '';
+        }
     });
 
     generateButton?.addEventListener('click', async () => {
@@ -187,8 +261,15 @@ function initHatModal() {
             style: styleField.value,
             size: sizeField.value,
             price: priceField.value,
+            image_url: imageField.value.trim(),
             description: descriptionField.value.trim() || null,
         };
+
+        if (!payload.image_url) {
+            formError.textContent = 'Every hat needs an image — upload a photo or use generated art.';
+            formError.classList.remove('hidden');
+            return;
+        }
 
         const isEdit = Boolean(idField.value);
         const url = isEdit ? `/api/hats/${idField.value}` : '/api/hats';

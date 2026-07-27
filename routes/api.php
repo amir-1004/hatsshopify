@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\DesignFileController;
 use App\Http\Controllers\Api\HatController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PrintfulController;
+use App\Http\Controllers\Api\TryOnController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/hats', [HatController::class, 'index']);
@@ -19,6 +20,9 @@ Route::delete('/hats/{hat}', [HatController::class, 'destroy']);
 Route::get('/orders/insights', [OrderController::class, 'insights']);
 Route::get('/orders', [OrderController::class, 'index']);
 Route::get('/orders/{order}', [OrderController::class, 'show']);
+
+// Virtual try-on: pixel measurements in, hat size out. No image data.
+Route::post('/try-on/recommend', [TryOnController::class, 'recommend']);
 
 // Printful print-on-demand (Design Studio).
 Route::get('/printful/products', [PrintfulController::class, 'catalogProducts']);

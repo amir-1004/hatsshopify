@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Hat;
+use App\Services\HatArtService;
 use Illuminate\Database\Seeder;
 
 class HatSeeder extends Seeder
@@ -22,7 +23,6 @@ class HatSeeder extends Seeder
                 'style' => 'Baseball',
                 'size' => 'Universal',
                 'description' => 'A timeless red baseball cap with a curved brim and adjustable strap. Perfect for everyday wear, rain or shine.',
-                'image_url' => null,
                 'price' => 89.90,
             ],
             [
@@ -31,7 +31,6 @@ class HatSeeder extends Seeder
                 'style' => 'Trucker',
                 'size' => 'L',
                 'description' => 'Breathable mesh-back trucker hat in classic black. Bold, laid-back, and built for warm days on the move.',
-                'image_url' => null,
                 'price' => 99.90,
             ],
             [
@@ -40,7 +39,6 @@ class HatSeeder extends Seeder
                 'style' => 'Snapback',
                 'size' => 'Universal',
                 'description' => 'A crisp blue snapback with a flat brim and structured crown. Street-ready style with an adjustable snap fit.',
-                'image_url' => null,
                 'price' => 109.00,
             ],
             [
@@ -49,7 +47,6 @@ class HatSeeder extends Seeder
                 'style' => 'Beanie',
                 'size' => 'S',
                 'description' => 'Soft knit beanie in a deep forest green. Snug, warm, and effortless for cold-weather layering.',
-                'image_url' => null,
                 'price' => 69.90,
             ],
             [
@@ -58,12 +55,15 @@ class HatSeeder extends Seeder
                 'style' => 'Bucket',
                 'size' => 'M',
                 'description' => 'Lightweight beige bucket hat with a wide brim for sun protection. A relaxed staple for warm-weather outings.',
-                'image_url' => null,
                 'price' => 79.90,
             ],
         ];
 
         foreach ($hats as $hat) {
+            // Every hat ships with a picture — generated art matching its
+            // own style and color, so image_url is never blank.
+            $hat['image_url'] = HatArtService::urlFor($hat['style'], $hat['color']);
+
             Hat::firstOrCreate(['name' => $hat['name']], $hat);
         }
     }
