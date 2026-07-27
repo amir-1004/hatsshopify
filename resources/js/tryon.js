@@ -175,11 +175,16 @@ function initTryOn(stage) {
         const image = new Image();
         image.decoding = 'async';
 
-        await new Promise((resolve, reject) => {
-            image.onload = resolve;
-            image.onerror = () => reject(new Error('Could not read that image.'));
-            image.src = src;
-        });
+        try {
+            await new Promise((resolve, reject) => {
+                image.onload = resolve;
+                image.onerror = () => reject(new Error('Could not read that image.'));
+                image.src = src;
+            });
+        } catch (error) {
+            setStatus("That file didn't load as an image", 'badge-error');
+            return;
+        }
 
         state.image = image;
         state.measurement = null;
