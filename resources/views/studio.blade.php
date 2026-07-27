@@ -100,6 +100,7 @@
                 </div>
 
                 <div id="mockup-error" class="hidden alert alert-error text-sm mt-2"></div>
+                <div id="mockup-color-warning" class="hidden alert alert-warning text-sm mt-2"></div>
 
                 <div id="mockup-gallery" class="hidden grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3"></div>
             </div>
@@ -445,6 +446,14 @@
                         });
 
                         const mockupData = await mockupResponse.json();
+
+                        const colorWarning = document.getElementById('mockup-color-warning');
+                        colorWarning.classList.add('hidden');
+
+                        if (mockupData.color_mismatch === true) {
+                            colorWarning.textContent = `⚠️ Color check: you're putting this design on a ${mockupData.variant_color} hat, but this catalog hat is listed as a different color. Double-check before ordering from the supplier.`;
+                            colorWarning.classList.remove('hidden');
+                        }
 
                         if (!mockupResponse.ok || !mockupData.task_key) {
                             throw new Error(mockupData.error ?? 'Could not start mockup generation.');

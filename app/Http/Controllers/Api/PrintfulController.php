@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\DesignFile;
 use App\Models\Hat;
 use App\Services\PrintfulService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class PrintfulController extends Controller
 {
@@ -90,7 +93,50 @@ class PrintfulController extends Controller
             'design_file_id' => $validated['design_file_id'],
         ]);
 
-        return response()->json(['task_key' => $taskKey]);
+        $variantColor = $this->variantColor(
+            $printful,
+            $validated['printful_product_id'],
+            $validated['printful_variant_id'],
+        );
+
+        return response()->json([
+            'task_key' => $taskKey,
+            'variant_color' => $variantColor,
+            'color_mismatch' => $this->colorsMismatch($hat->color, $variantColor),
+        ]);
+    }
+
+    /**
+     * Look up the chosen Printful variant's color (null if unavailable).
+     */
+    protected function variantColor(PrintfulService $printful, int $productId, int $variantId): ?string
+    {
+        $product = $printful->getProduct($productId);
+
+        if ($product === null) {
+            return null;
+        }
+
+        $variant = collect($product['variants'])->firstWhere('id', $variantId);
+
+        return $variant['color'] ?? null;
+    }
+
+    /**
+     * True when both colors are known and neither contains the other
+     * (case-insensitive) — e.g. a "Red" hat on a "Black" variant.
+     * Null when either color is unknown (no verdict).
+     */
+    protected function colorsMismatch(?string $hatColor, ?string $variantColor): ?bool
+    {
+        if (! $hatColor || ! $variantColor) {
+            return null;
+        }
+
+        $a = mb_strtolower(trim($hatColor));
+        $b = mb_strtolower(trim($variantColor));
+
+        return ! (str_contains($a, $b) || str_contains($b, $a));
     }
 
     /**
@@ -115,10 +161,13 @@ class PrintfulController extends Controller
                 $hat = Hat::find($hatId);
 
                 if ($hat) {
+                    // Printful mockup URLs expire after ~72h — archive each
+                    // image into the database and serve it from our own route.
                     $mockupUrls = collect($result['mockups'] ?? [])
                         ->pluck('mockup_url')
                         ->filter()
                         ->values()
+                        ->map(fn (string $url, int $index) => $this->archiveMockup($hat, $url, $index))
                         ->all();
 
                     $hat->update([
@@ -130,6 +179,36 @@ class PrintfulController extends Controller
         }
 
         return response()->json($result);
+    }
+
+    /**
+     * Download a Printful mockup and store it as a DesignFile, returning our
+     * own permanent URL. Falls back to the (expiring) remote URL on failure.
+     */
+    protected function archiveMockup(Hat $hat, string $url, int $index): string
+    {
+        try {
+            $response = Http::timeout(20)->get($url);
+
+            if ($response->failed()) {
+                return $url;
+            }
+
+            $bytes = $response->body();
+
+            $file = DesignFile::create([
+                'filename' => "mockup-hat-{$hat->id}-{$index}.jpg",
+                'mime' => strtok($response->header('Content-Type') ?: 'image/jpeg', ';'),
+                'data' => $bytes,
+                'byte_size' => strlen($bytes),
+            ]);
+
+            return route('design-files.show', ['designFile' => $file->id]);
+        } catch (\Throwable $e) {
+            Log::warning('Could not archive mockup image.', ['url' => $url, 'error' => $e->getMessage()]);
+
+            return $url;
+        }
     }
 
     /**

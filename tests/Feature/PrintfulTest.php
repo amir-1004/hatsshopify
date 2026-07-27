@@ -58,12 +58,28 @@ class PrintfulTest extends TestCase
         ], 200);
     }
 
+    /**
+     * Product 206 with a single Black variant (4011), for color-check fakes.
+     */
+    private function fakeProductResponse(): \GuzzleHttp\Promise\PromiseInterface
+    {
+        return Http::response([
+            'result' => [
+                'product' => ['id' => 206, 'title' => 'Snapback Cap'],
+                'variants' => [
+                    ['id' => 4011, 'name' => 'Snapback Cap (Black)', 'color' => 'Black'],
+                ],
+            ],
+        ], 200);
+    }
+
     public function test_mockup_endpoint_creates_task_and_updates_hat(): void
     {
         config(['services.printful.key' => 'test-key']);
 
         Http::fake([
             'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
+            'api.printful.com/products/*' => $this->fakeProductResponse(),
             'api.printful.com/mockup-generator/create-task/*' => Http::response([
                 'result' => ['task_key' => 'abc123'],
             ], 200),
@@ -101,6 +117,7 @@ class PrintfulTest extends TestCase
 
         Http::fake([
             'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
+            'api.printful.com/products/*' => $this->fakeProductResponse(),
             'api.printful.com/mockup-generator/create-task/*' => Http::response([
                 'result' => ['task_key' => 'abc123'],
             ], 200),
@@ -141,6 +158,7 @@ class PrintfulTest extends TestCase
 
         Http::fake([
             'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
+            'api.printful.com/products/*' => $this->fakeProductResponse(),
             'api.printful.com/mockup-generator/create-task/*' => Http::response([
                 'code' => 400,
                 'result' => 'This endpoint requires `store_id`!',
@@ -171,6 +189,7 @@ class PrintfulTest extends TestCase
 
         Http::fake([
             'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
+            'api.printful.com/products/*' => $this->fakeProductResponse(),
             'api.printful.com/mockup-generator/create-task/*' => Http::response([
                 'result' => ['task_key' => 'abc123'],
             ], 200),
@@ -221,9 +240,11 @@ class PrintfulTest extends TestCase
         $this->assertStringContainsString('Invalid recipient country code', $response->json('error'));
     }
 
-    public function test_mockup_task_completed_saves_mockup_urls_on_hat(): void
+    public function test_mockup_task_completed_archives_mockups_locally_on_hat(): void
     {
         config(['services.printful.key' => 'test-key']);
+
+        $jpegBytes = "\xFF\xD8\xFF fake-jpeg-bytes";
 
         Http::fake([
             'api.printful.com/mockup-generator/task*' => Http::response([
@@ -235,9 +256,13 @@ class PrintfulTest extends TestCase
                     ],
                 ],
             ], 200),
+            // Printful mockup URLs expire after ~72h, so the app must download
+            // and re-serve them from its own database.
+            'files.printful.com/*' => Http::response($jpegBytes, 200, ['Content-Type' => 'image/jpeg']),
         ]);
 
         $hat = Hat::factory()->create(['image_url' => 'https://example.com/old.png']);
+        $designFilesBefore = DesignFile::count();
 
         $response = $this->getJson("/api/mockup-tasks/abc123?hat_id={$hat->id}");
 
@@ -246,11 +271,97 @@ class PrintfulTest extends TestCase
 
         $hat->refresh();
 
-        $this->assertEquals(
-            ['https://files.printful.com/mockup1.jpg', 'https://files.printful.com/mockup2.jpg'],
-            $hat->mockup_urls
-        );
-        $this->assertEquals('https://files.printful.com/mockup1.jpg', $hat->image_url);
+        $this->assertCount(2, $hat->mockup_urls);
+        $this->assertEquals(DesignFile::count(), $designFilesBefore + 2);
+
+        foreach ($hat->mockup_urls as $url) {
+            $this->assertStringContainsString('/design-files/', $url);
+        }
+
+        $this->assertEquals($hat->mockup_urls[0], $hat->image_url);
+
+        // The archived copy must serve the original bytes.
+        $served = $this->get($hat->mockup_urls[0]);
+        $served->assertStatus(200);
+        $this->assertEquals($jpegBytes, $served->getContent());
+    }
+
+    public function test_mockup_archiving_falls_back_to_remote_urls_when_download_fails(): void
+    {
+        config(['services.printful.key' => 'test-key']);
+
+        Http::fake([
+            'api.printful.com/mockup-generator/task*' => Http::response([
+                'result' => [
+                    'status' => 'completed',
+                    'mockups' => [
+                        ['mockup_url' => 'https://files.printful.com/mockup1.jpg'],
+                    ],
+                ],
+            ], 200),
+            'files.printful.com/*' => Http::response('nope', 500),
+        ]);
+
+        $hat = Hat::factory()->create();
+
+        $this->getJson("/api/mockup-tasks/abc123?hat_id={$hat->id}")->assertStatus(200);
+
+        $hat->refresh();
+        $this->assertEquals(['https://files.printful.com/mockup1.jpg'], $hat->mockup_urls);
+    }
+
+    public function test_mockup_response_flags_variant_color_mismatch(): void
+    {
+        config(['services.printful.key' => 'test-key']);
+
+        Http::fake([
+            'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
+            'api.printful.com/mockup-generator/create-task/*' => Http::response([
+                'result' => ['task_key' => 'abc123'],
+            ], 200),
+            'api.printful.com/products/*' => $this->fakeProductResponse(),
+        ]);
+
+        $hat = Hat::factory()->create(['color' => 'Red']);
+        $designFile = DesignFile::factory()->create();
+
+        $response = $this->postJson("/api/hats/{$hat->id}/mockup", [
+            'printful_product_id' => 206,
+            'printful_variant_id' => 4011,
+            'design_file_id' => $designFile->id,
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'task_key' => 'abc123',
+            'variant_color' => 'Black',
+            'color_mismatch' => true,
+        ]);
+    }
+
+    public function test_mockup_response_accepts_matching_variant_color(): void
+    {
+        config(['services.printful.key' => 'test-key']);
+
+        Http::fake([
+            'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
+            'api.printful.com/mockup-generator/create-task/*' => Http::response([
+                'result' => ['task_key' => 'abc123'],
+            ], 200),
+            'api.printful.com/products/*' => $this->fakeProductResponse(),
+        ]);
+
+        $hat = Hat::factory()->create(['color' => 'Black']);
+        $designFile = DesignFile::factory()->create();
+
+        $response = $this->postJson("/api/hats/{$hat->id}/mockup", [
+            'printful_product_id' => 206,
+            'printful_variant_id' => 4011,
+            'design_file_id' => $designFile->id,
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson(['color_mismatch' => false]);
     }
 
     public function test_mockup_endpoint_returns_422_and_leaves_hat_unchanged_on_printful_failure(): void
@@ -259,6 +370,7 @@ class PrintfulTest extends TestCase
 
         Http::fake([
             'api.printful.com/mockup-generator/printfiles/*' => $this->fakePrintfilesResponse(),
+            'api.printful.com/products/*' => $this->fakeProductResponse(),
             'api.printful.com/mockup-generator/create-task/*' => Http::response(['error' => 'server error'], 500),
         ]);
 
