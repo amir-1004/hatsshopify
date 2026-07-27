@@ -221,14 +221,16 @@ export function buildHeadMesh(landmarks, image, worldWidth, worldHeight) {
         new THREE.MeshStandardMaterial({ color: hair, roughness: 0.95, metalness: 0 }),
     );
 
-    skull.scale.set(radius, radius * 1.22, radius / 0.78);
+    skull.scale.set(radius, radius * 1.22, radius * 1.05);
     skull.quaternion.copy(basis);
 
-    // Sit the skull behind and slightly above the face oval's centre: the
-    // face is the front of the head, not the middle of it.
+    // The skull goes *behind* the face, not around it: its front surface is
+    // parked on the plane of the face oval, so every forward-facing part of
+    // the photo mesh — nose, cheeks, forehead — still renders in front of it,
+    // and only the parts that curve away toward the ears get covered.
     const skullCenter = new THREE.Vector3()
-        .addScaledVector(forward, -radius * 0.38)
-        .addScaledVector(up, radius * 0.16);
+        .addScaledVector(forward, -radius * 1.03)
+        .addScaledVector(up, radius * 0.14);
 
     skull.position.copy(skullCenter);
 
