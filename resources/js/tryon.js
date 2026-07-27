@@ -128,7 +128,7 @@ function initTryOn(stage) {
      * where the hat sits on it.
      */
     function buildModel() {
-        const { worldWidth, worldHeight, scale } = photoRect();
+        const { worldWidth, worldHeight } = photoRect();
 
         if (!state.measurement || !state.image) return;
 
@@ -139,26 +139,14 @@ function initTryOn(stage) {
             worldHeight,
         );
 
-        view.setHead(head.mesh, head.center);
+        view.setHead(head.group, head.center);
 
-        // Hat geometry is normalised to a crown radius of 1. The hat is wider
-        // than the measured skull (HatSizingService.FACE_TO_SKULL_WIDTH)
-        // because it sits around the head, over the hair, not against bone.
-        const radius = (state.measurement.faceWidthPx * 1.3 * scale) / 2;
-
-        // Anchor on the top of the forehead, in the same world space the mesh
-        // was built in, then express it relative to the head centre.
-        const top = state.measurement.top;
-        const anchorX = (top.x / state.image.naturalWidth - 0.5) * worldWidth;
-        const anchorY = (0.5 - (top.y + state.measurement.faceHeightPx * 0.06) / state.image.naturalHeight) * worldHeight;
-
+        // Hat geometry is normalised to a crown radius of 1, and the hat sits
+        // over the hair rather than against the skull, so it's a touch wider.
         state.hatFit = {
-            x: anchorX - head.center.x,
-            y: anchorY - head.center.y,
-            radius,
-            roll: state.measurement.roll,
-            yaw: state.measurement.yaw,
-            pitch: state.measurement.pitch,
+            position: head.bandOffset,
+            quaternion: head.basis,
+            radius: head.radius * 1.07,
         };
 
         applyTransforms();
@@ -630,7 +618,7 @@ function createScene(canvas) {
 
     /**
      * @param {{yaw:number,pitch:number,zoom:number}} orbit  applied to head + hat together
-     * @param {?{x:number,y:number,radius:number,roll:number,yaw:number,pitch:number}} fit
+     * @param {?{position:THREE.Vector3,quaternion:THREE.Quaternion,radius:number}} fit
      * @param {{x:number,y:number}} nudge manual hat offset, in CSS pixels
      */
     function apply(orbit, fit, nudge) {
@@ -639,9 +627,9 @@ function createScene(canvas) {
 
         if (hat) {
             if (fit) {
-                hatPivot.position.set(fit.x + nudge.x, fit.y + nudge.y, 0);
+                hatPivot.position.copy(fit.position).add(new THREE.Vector3(nudge.x, nudge.y, 0));
                 hatPivot.scale.setScalar(fit.radius);
-                hatPivot.rotation.set(fit.pitch, fit.yaw, -fit.roll, 'YXZ');
+                hatPivot.quaternion.copy(fit.quaternion);
             } else {
                 // No face yet: park the hat mid-stage as a preview.
                 const radius = Math.min(width, height) * 0.2;

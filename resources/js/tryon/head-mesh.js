@@ -2,9 +2,16 @@
 //
 // The landmarks MediaPipe returns are already 3D — x, y in image space and a
 // z depth relative to the centre of the head. Triangulate them and project
-// the shopper's own photo on as a texture and you get a real mesh of their
+// the shopper's own photo on as the texture and you get a real mesh of their
 // face that can be rotated, rather than a photo with a hat drawn on it.
 // (Same technique as PyFace3D and Babylon's facecap.)
+//
+// A photo only contains a face, though, and a face on its own is a mask: a
+// hat sized for a head floats above it with nothing to sit on. So the face
+// mesh is mounted on a skull — an ellipsoid fitted to the same landmarks and
+// painted the shopper's hair colour, sampled from their photo. It's mostly
+// hidden behind the face and under the hat; its job is to give the head
+// volume, and the hat something to rest on.
 
 import * as THREE from 'three';
 import Delaunator from 'delaunator';
@@ -27,6 +34,15 @@ const FACE_OVAL = [
     162, 21, 54, 103, 67, 109,
 ];
 
+const LANDMARK = {
+    faceRight: 234,
+    faceLeft: 454,
+    foreheadTop: 10,
+    chin: 152,
+    templeRight: 54,
+    templeLeft: 284,
+};
+
 /** MediaPipe says z "uses roughly the same scale as x". */
 const DEPTH_SCALE = 1.0;
 
@@ -46,42 +62,84 @@ function pointInPolygon(x, y, polygon) {
 }
 
 /**
- * Build a textured mesh of the face, centred on the head so it can be
- * rotated in place.
+ * Average colour of the photo at a few normalised points — used to paint the
+ * skull the shopper's own hair colour instead of an arbitrary grey.
+ */
+function sampleColor(image, samples) {
+    try {
+        const canvas = document.createElement('canvas');
+        const size = 160;
+
+        canvas.width = size;
+        canvas.height = size;
+
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        context.drawImage(image, 0, 0, size, size);
+
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let taken = 0;
+
+        for (const [nx, ny] of samples) {
+            if (nx < 0 || nx > 1 || ny < 0 || ny > 1) continue;
+
+            const pixel = context.getImageData(
+                Math.min(size - 1, Math.max(0, Math.round(nx * size))),
+                Math.min(size - 1, Math.max(0, Math.round(ny * size))),
+                1,
+                1,
+            ).data;
+
+            r += pixel[0];
+            g += pixel[1];
+            b += pixel[2];
+            taken += 1;
+        }
+
+        if (!taken) return new THREE.Color(0x3a3a3a);
+
+        return new THREE.Color(`rgb(${Math.round(r / taken)}, ${Math.round(g / taken)}, ${Math.round(b / taken)})`);
+    } catch (error) {
+        // A cross-origin photo taints the canvas; a neutral scalp is fine.
+        return new THREE.Color(0x3a3a3a);
+    }
+}
+
+/**
+ * Build the shopper's head: a photo-textured face mesh mounted on a fitted
+ * skull, centred on the origin so it can be rotated in place.
  *
  * @param {Array<{x:number,y:number,z:number}>} landmarks normalised, from MediaPipe
  * @param {HTMLImageElement} image the shopper's photo
  * @param {number} worldWidth  width of the photo in world units
  * @param {number} worldHeight height of the photo in world units
- * @returns {{mesh: THREE.Mesh, center: THREE.Vector3, radius: number}}
+ * @returns {{group: THREE.Group, center: THREE.Vector3, radius: number, basis: THREE.Quaternion, bandOffset: THREE.Vector3}}
  */
 export function buildHeadMesh(landmarks, image, worldWidth, worldHeight) {
     const points = landmarks.slice(0, SURFACE_POINT_COUNT);
 
     // World position of each landmark, with the photo centred on the origin.
-    const toWorld = (point) => [
+    const world = points.map((point) => new THREE.Vector3(
         (point.x - 0.5) * worldWidth,
         (0.5 - point.y) * worldHeight,
         -(point.z ?? 0) * worldWidth * DEPTH_SCALE,
-    ];
-
-    const world = points.map(toWorld);
+    ));
 
     // Centre on the middle of the face oval so rotation pivots on the head.
-    const ovalPoints = FACE_OVAL.map((index) => world[index]);
-    const center = new THREE.Vector3(
-        ovalPoints.reduce((sum, p) => sum + p[0], 0) / ovalPoints.length,
-        ovalPoints.reduce((sum, p) => sum + p[1], 0) / ovalPoints.length,
-        ovalPoints.reduce((sum, p) => sum + p[2], 0) / ovalPoints.length,
-    );
+    const center = new THREE.Vector3();
+    FACE_OVAL.forEach((index) => center.add(world[index]));
+    center.divideScalar(FACE_OVAL.length);
+
+    // ------------------------------------------------------ the face mesh
 
     const positions = new Float32Array(points.length * 3);
     const uvs = new Float32Array(points.length * 2);
 
     points.forEach((point, i) => {
-        positions[i * 3] = world[i][0] - center.x;
-        positions[i * 3 + 1] = world[i][1] - center.y;
-        positions[i * 3 + 2] = world[i][2] - center.z;
+        positions[i * 3] = world[i].x - center.x;
+        positions[i * 3 + 1] = world[i].y - center.y;
+        positions[i * 3 + 2] = world[i].z - center.z;
 
         // The landmarks are normalised image coordinates, so they double as
         // texture coordinates — the photo lands exactly where it was taken
@@ -90,7 +148,6 @@ export function buildHeadMesh(landmarks, image, worldWidth, worldHeight) {
         uvs[i * 2 + 1] = 1 - point.y;
     });
 
-    // Triangulate in 2D image space, then lift onto the depth we already have.
     const flat = [];
     points.forEach((point) => flat.push(point.x, point.y));
 
@@ -119,13 +176,70 @@ export function buildHeadMesh(landmarks, image, worldWidth, worldHeight) {
 
     // Unlit: the photo already has this person's real lighting baked in, and
     // relighting it would only fight the original exposure.
-    const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+    const face = new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }),
+    );
 
-    const mesh = new THREE.Mesh(geometry, material);
+    // ------------------------------------------------- the head's own axes
 
-    geometry.computeBoundingSphere();
+    const right = world[LANDMARK.faceLeft].clone().sub(world[LANDMARK.faceRight]);
+    const up = world[LANDMARK.foreheadTop].clone().sub(world[LANDMARK.chin]);
 
-    return { mesh, center, radius: geometry.boundingSphere?.radius ?? 1 };
+    const headWidth = right.length();
+
+    right.normalize();
+    up.normalize();
+
+    // Forward comes out of the face; flip it if the cross product points away
+    // from the camera.
+    const forward = new THREE.Vector3().crossVectors(right, up).normalize();
+    if (forward.z < 0) forward.negate();
+
+    // Re-orthogonalise so the basis is clean even on an odd head pose.
+    up.crossVectors(forward, right).normalize();
+
+    const basis = new THREE.Quaternion().setFromRotationMatrix(
+        new THREE.Matrix4().makeBasis(right, up, forward),
+    );
+
+    // ---------------------------------------------------------- the skull
+
+    // Skull breadth mirrors HatSizingService.FACE_TO_SKULL_WIDTH, and depth
+    // follows the same cephalic index the server sizes with.
+    const radius = (headWidth * 1.12) / 2;
+
+    const hair = sampleColor(image, [
+        // Just above the hairline, and both temples.
+        [points[LANDMARK.foreheadTop].x, Math.max(0, points[LANDMARK.foreheadTop].y - 0.05)],
+        [points[LANDMARK.templeRight].x, Math.max(0, points[LANDMARK.templeRight].y - 0.03)],
+        [points[LANDMARK.templeLeft].x, Math.max(0, points[LANDMARK.templeLeft].y - 0.03)],
+    ]);
+
+    const skull = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 48, 36),
+        new THREE.MeshStandardMaterial({ color: hair, roughness: 0.95, metalness: 0 }),
+    );
+
+    skull.scale.set(radius, radius * 1.22, radius / 0.78);
+    skull.quaternion.copy(basis);
+
+    // Sit the skull behind and slightly above the face oval's centre: the
+    // face is the front of the head, not the middle of it.
+    const skullCenter = new THREE.Vector3()
+        .addScaledVector(forward, -radius * 0.38)
+        .addScaledVector(up, radius * 0.16);
+
+    skull.position.copy(skullCenter);
+
+    const group = new THREE.Group();
+    group.add(skull);
+    group.add(face);
+
+    // Where a hat's band belongs: up the skull from its centre, in head space.
+    const bandOffset = skullCenter.clone().addScaledVector(up, radius * 0.62);
+
+    return { group, center, radius, basis, bandOffset };
 }
 
 export { FACE_OVAL, SURFACE_POINT_COUNT };
