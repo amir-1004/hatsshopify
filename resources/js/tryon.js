@@ -6,6 +6,7 @@
 // which owns the geometry that turns them into centimetres and a size.
 
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { detectFace, measureFace } from './tryon/face.js';
 import { buildHat } from './tryon/hat-model.js';
 import { buildHeadMesh } from './tryon/head-mesh.js';
@@ -541,16 +542,24 @@ function createScene(canvas) {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setClearColor(0x000000, 0);
 
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(FOV, 1, 1, 40000);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x1b2430, 1.35));
+    // Fabric only looks like fabric when there's a room for it to reflect.
+    // RoomEnvironment ships with three, so this costs no download.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.5);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x1b2430, 0.7));
+
+    const key = new THREE.DirectionalLight(0xffffff, 1.1);
     key.position.set(-400, 700, 900);
     scene.add(key);
 
-    const rim = new THREE.DirectionalLight(0x9ec5fe, 0.7);
+    const rim = new THREE.DirectionalLight(0x9ec5fe, 0.5);
     rim.position.set(600, 300, -500);
     scene.add(rim);
 

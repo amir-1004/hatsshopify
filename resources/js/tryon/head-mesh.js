@@ -178,7 +178,9 @@ export function buildHeadMesh(landmarks, image, worldWidth, worldHeight) {
     // relighting it would only fight the original exposure.
     const face = new THREE.Mesh(
         geometry,
-        new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }),
+        // toneMapped:false keeps the shopper's face exactly the colours their
+        // camera recorded — the renderer's filmic curve is there for the hat.
+        new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false }),
     );
 
     // ------------------------------------------------- the head's own axes

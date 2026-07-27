@@ -19,11 +19,66 @@ function shade(hex, factor) {
     );
 }
 
+/**
+ * A woven-fabric normal map, drawn once into a canvas.
+ *
+ * Flat-shaded polygons read as plastic no matter how good the silhouette is
+ * — what says "hat" is the weave catching the light. This is cheap enough to
+ * generate at runtime and needs no asset to download.
+ */
+let weaveTexture = null;
+
+function weave() {
+    if (weaveTexture) return weaveTexture;
+
+    const size = 256;
+    const canvas = document.createElement('canvas');
+
+    canvas.width = size;
+    canvas.height = size;
+
+    const context = canvas.getContext('2d');
+    const image = context.createImageData(size, size);
+
+    for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+            // Two out-of-phase ripples crossing at right angles read as warp
+            // and weft; the noise keeps it from looking like graph paper.
+            const warp = Math.sin((x / size) * Math.PI * 2 * 48);
+            const weft = Math.sin((y / size) * Math.PI * 2 * 48);
+            const noise = (Math.random() - 0.5) * 0.35;
+
+            const i = (y * size + x) * 4;
+            image.data[i] = 128 + (warp + noise) * 26; // normal.x
+            image.data[i + 1] = 128 + (weft + noise) * 26; // normal.y
+            image.data[i + 2] = 255; // normal.z
+            image.data[i + 3] = 255;
+        }
+    }
+
+    context.putImageData(image, 0, 0);
+
+    weaveTexture = new THREE.CanvasTexture(canvas);
+    weaveTexture.wrapS = THREE.RepeatWrapping;
+    weaveTexture.wrapT = THREE.RepeatWrapping;
+    weaveTexture.repeat.set(6, 6);
+
+    return weaveTexture;
+}
+
 function fabric(hex, factor = 1) {
-    return new THREE.MeshStandardMaterial({
+    return new THREE.MeshPhysicalMaterial({
         color: shade(hex, factor),
-        roughness: 0.85,
-        metalness: 0.02,
+        roughness: 0.78,
+        metalness: 0,
+        normalMap: weave(),
+        normalScale: new THREE.Vector2(0.45, 0.45),
+        // Brushed cotton picks up a soft off-axis highlight rather than a
+        // hard specular dot.
+        sheen: 0.55,
+        sheenRoughness: 0.85,
+        sheenColor: shade(hex, 1.5),
+        envMapIntensity: 0.75,
     });
 }
 
