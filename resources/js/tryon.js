@@ -146,7 +146,7 @@ function initTryOn(stage) {
         state.hatFit = {
             position: head.bandOffset,
             quaternion: head.basis,
-            radius: head.radius * 1.16,
+            radius: head.radius * 1.05,
         };
 
         applyTransforms();
