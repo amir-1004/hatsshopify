@@ -13,6 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Render terminates TLS at its proxy; trust X-Forwarded-* so Laravel
+        // generates https URLs (otherwise assets are blocked as mixed content).
+        $middleware->trustProxies(at: '*');
+
         $middleware->validateCsrfTokens(except: [
             'webhook/shopify/orders-create',
         ]);
