@@ -21,8 +21,8 @@ class PrintfulService
 {
     protected const BASE_URL = 'https://api.printful.com';
 
-    /** Headwear category id in Printful's catalog. */
-    protected const HEADWEAR_CATEGORY_ID = 24;
+    /** "All hats" category id in Printful's catalog (verified via GET /categories). */
+    protected const HEADWEAR_CATEGORY_ID = 15;
 
     /**
      * Curated headwear catalog, cached for 1 hour.
