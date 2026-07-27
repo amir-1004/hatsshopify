@@ -225,13 +225,18 @@ function initTryOn(stage) {
 
         state.measurement = measureFace(landmarks, state.image.naturalWidth, state.image.naturalHeight);
 
-        await runScanAnimation(state.measurement);
-
         setStatus('Face mapped ✓', 'badge-success');
         window.setTimeout(() => setStatus(null), 2200);
 
         autoPlace();
         applyPlacement();
+
+        // The scan flourish is decoration, so it runs alongside rather than
+        // in front of the result: requestAnimationFrame doesn't fire in a
+        // background tab, and a shopper who switched tabs mid-scan should
+        // still come back to their measurements.
+        runScanAnimation(state.measurement);
+
         await refreshRecommendation();
     }
 
