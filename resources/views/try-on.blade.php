@@ -144,10 +144,10 @@
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2 text-sm opacity-70">
-                    <span class="badge badge-ghost">🖱️ Drag to rotate</span>
-                    <span class="badge badge-ghost">⇧ + drag to move</span>
-                    <span class="badge badge-ghost">Scroll to resize</span>
-                    <button type="button" id="tryon-reset-btn" class="btn btn-xs btn-outline ml-auto">Reset fit</button>
+                    <span class="badge badge-ghost">🖱️ Drag to turn your head</span>
+                    <span class="badge badge-ghost">⇧ + drag to nudge the hat</span>
+                    <span class="badge badge-ghost">Scroll to zoom</span>
+                    <button type="button" id="tryon-reset-btn" class="btn btn-xs btn-outline ml-auto">Reset view</button>
                 </div>
             </div>
         </div>

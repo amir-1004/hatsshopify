@@ -1,5 +1,5 @@
-// Virtual try-on: measure a shopper's head from a photo, then put a 3D hat
-// on it that they can push around with the mouse.
+// Virtual try-on: turn a shopper's photo into a 3D model of their head
+// wearing the hat, which they can rotate with the mouse.
 //
 // Everything image-related happens on the shopper's device. Only two numbers
 // (the eye distance and face width, in pixels) are POSTed to the server,
@@ -8,13 +8,17 @@
 import * as THREE from 'three';
 import { detectFace, measureFace } from './tryon/face.js';
 import { buildHat } from './tryon/hat-model.js';
+import { buildHeadMesh } from './tryon/head-mesh.js';
 
 // Portraits are shot on long lenses, and the virtual camera has to agree
-// with the one that took the photo. A wide FOV looks steeply up at a hat
-// sitting near the top of the frame, exposing the underside of the brim and
-// the full sweatband ring — the hat reads as a flying saucer. ~20° is an
-// 85mm-equivalent portrait lens, which sees the hat close to head-on.
+// with the one that took the photo. A wide FOV looks steeply up at a head
+// near the top of the frame; ~20° is an 85mm-equivalent portrait lens.
 const FOV = 20;
+
+// A single photo only knows the front of a head, so the orbit stops before
+// the mesh would show its edges. (Completing the skull is a v2 job.)
+const MAX_YAW = 0.72;
+const MAX_PITCH = 0.42;
 
 document.addEventListener('DOMContentLoaded', () => {
     const stage = document.getElementById('tryon-stage');
@@ -53,7 +57,9 @@ function initTryOn(stage) {
     const state = {
         image: null, // HTMLImageElement of the shopper's photo
         measurement: null, // output of measureFace(), in photo pixels
-        placement: null, // where the hat sits, in stage CSS pixels
+        hatFit: null, // where the hat sits relative to the head centre
+        orbit: { yaw: 0, pitch: 0, zoom: 1 },
+        nudge: { x: 0, y: 0 },
         stream: null,
     };
 
@@ -84,19 +90,20 @@ function initTryOn(stage) {
         }
 
         view.setHat(hat ? buildHat(hat.style, hat.hex) : null);
-        applyPlacement();
+        applyTransforms();
     }
 
     el.hatSelect?.addEventListener('change', () => {
         swapHat();
-        if (state.measurement || state.placement) refreshRecommendation();
+        if (state.measurement) refreshRecommendation();
     });
 
     // -------------------------------------------------------------- layout
 
     /**
-     * Where the photo actually lands inside the stage once `object-contain`
-     * has letterboxed it — the mapping from photo pixels to stage pixels.
+     * Where the photo lands inside the stage once `object-contain` has
+     * letterboxed it. World units are CSS pixels, so this is also the photo's
+     * size in the 3D scene.
      */
     function photoRect() {
         const { clientWidth: sw, clientHeight: sh } = el.stage;
@@ -109,56 +116,61 @@ function initTryOn(stage) {
             scale,
             offsetX: (sw - state.image.naturalWidth * scale) / 2,
             offsetY: (sh - state.image.naturalHeight * scale) / 2,
+            worldWidth: state.image.naturalWidth * scale,
+            worldHeight: state.image.naturalHeight * scale,
             stageWidth: sw,
             stageHeight: sh,
         };
     }
 
     /**
-     * Recompute where the hat sits from the last face measurement.
+     * Rebuild the 3D head from the current photo + landmarks, and work out
+     * where the hat sits on it.
      */
-    function autoPlace() {
-        const measurement = state.measurement;
+    function buildModel() {
+        const { worldWidth, worldHeight, scale } = photoRect();
 
-        if (!measurement) {
-            const { stageWidth, stageHeight } = photoRect();
+        if (!state.measurement || !state.image) return;
 
-            state.placement = {
-                x: stageWidth / 2,
-                y: stageHeight * 0.42,
-                radius: Math.min(stageWidth, stageHeight) * 0.2,
-                yaw: 0,
-                pitch: 0,
-                roll: 0,
-                scale: 1,
-            };
+        const head = buildHeadMesh(
+            state.measurement.landmarks,
+            state.image,
+            worldWidth,
+            worldHeight,
+        );
 
-            return;
-        }
+        view.setHead(head.mesh, head.center);
 
-        const { scale, offsetX, offsetY } = photoRect();
+        // Hat geometry is normalised to a crown radius of 1. The hat is wider
+        // than the measured skull (HatSizingService.FACE_TO_SKULL_WIDTH)
+        // because it sits around the head, over the hair, not against bone.
+        const radius = (state.measurement.faceWidthPx * 1.3 * scale) / 2;
 
-        // Half-width of the *hat*, in stage pixels. Wider than the measured
-        // skull (HatSizingService.FACE_TO_SKULL_WIDTH) because a hat sits
-        // around the head, over the hair, rather than flush against bone.
-        const radius = (measurement.faceWidthPx * 1.3 * scale) / 2;
+        // Anchor on the top of the forehead, in the same world space the mesh
+        // was built in, then express it relative to the head centre.
+        const top = state.measurement.top;
+        const anchorX = (top.x / state.image.naturalWidth - 0.5) * worldWidth;
+        const anchorY = (0.5 - (top.y + state.measurement.faceHeightPx * 0.06) / state.image.naturalHeight) * worldHeight;
 
-        state.placement = {
-            x: offsetX + measurement.center.x * scale,
-            // Sit the band just below the top of the forehead.
-            y: offsetY + (measurement.top.y + measurement.faceHeightPx * 0.06) * scale,
+        state.hatFit = {
+            x: anchorX - head.center.x,
+            y: anchorY - head.center.y,
             radius,
-            yaw: measurement.yaw,
-            pitch: measurement.pitch,
-            roll: measurement.roll,
-            scale: 1,
+            roll: state.measurement.roll,
+            yaw: state.measurement.yaw,
+            pitch: state.measurement.pitch,
         };
+
+        applyTransforms();
     }
 
-    function applyPlacement() {
-        if (!state.placement) autoPlace();
+    function applyTransforms() {
+        view.apply(state.orbit, state.hatFit, state.nudge);
 
-        view.place(state.placement, photoRect());
+        // The flat photo is only there to make the first frame seamless —
+        // once the model turns, it would be a second, un-rotated head.
+        const turned = Math.min(1, (Math.abs(state.orbit.yaw) + Math.abs(state.orbit.pitch)) / 0.1);
+        el.photo.style.opacity = state.measurement ? String(1 - turned) : '1';
     }
 
     // ------------------------------------------------------------- scanning
@@ -194,9 +206,14 @@ function initTryOn(stage) {
 
         state.image = image;
         state.measurement = null;
-        state.placement = null;
+        state.hatFit = null;
+        state.orbit = { yaw: 0, pitch: 0, zoom: 1 };
+        state.nudge = { x: 0, y: 0 };
+
+        view.setHead(null);
 
         el.photo.src = src;
+        el.photo.style.opacity = '1';
         el.photo.classList.remove('hidden');
         el.placeholder.classList.add('hidden');
         el.rescanBtn.classList.remove('hidden');
@@ -217,30 +234,24 @@ function initTryOn(stage) {
             landmarks = await detectFace(state.image);
         } catch (error) {
             setStatus('Face scanner unavailable — set your size by hand', 'badge-warning');
-            autoPlace();
-            applyPlacement();
             return;
         }
 
         if (!landmarks) {
             setStatus('No face found — try a clearer, front-on photo', 'badge-warning');
-            autoPlace();
-            applyPlacement();
             return;
         }
 
         state.measurement = measureFace(landmarks, state.image.naturalWidth, state.image.naturalHeight);
 
-        setStatus('Face mapped ✓', 'badge-success');
-        window.setTimeout(() => setStatus(null), 2200);
+        setStatus('Face mapped ✓ — drag to turn your head', 'badge-success');
+        window.setTimeout(() => setStatus(null), 3200);
 
-        autoPlace();
-        applyPlacement();
+        buildModel();
 
-        // The scan flourish is decoration, so it runs alongside rather than
-        // in front of the result: requestAnimationFrame doesn't fire in a
-        // background tab, and a shopper who switched tabs mid-scan should
-        // still come back to their measurements.
+        // The scan flourish is decoration, so it runs alongside the result:
+        // requestAnimationFrame doesn't fire in a background tab, and a
+        // shopper who switched tabs mid-scan should still get their model.
         runScanAnimation(state.measurement);
 
         await refreshRecommendation();
@@ -268,18 +279,17 @@ function initTryOn(stage) {
 
     /**
      * The dot-projector moment: sweep a band down the face, lighting up the
-     * landmark cloud as it passes, then draw the two measurements we took.
+     * landmark cloud as it passes, then fade it out.
      */
     function runScanAnimation(measurement) {
         const context = sizeOverlay();
         const { scale, offsetX, offsetY } = photoRect();
 
-        const toStage = (point) => ({
+        const points = measurement.points.map((point) => ({
             x: offsetX + point.x * scale,
             y: offsetY + point.y * scale,
-        });
+        }));
 
-        const points = measurement.points.map(toStage);
         const ys = points.map((point) => point.y);
         const from = Math.min(...ys) - 20;
         const to = Math.max(...ys) + 20;
@@ -287,80 +297,28 @@ function initTryOn(stage) {
         const duration = 1100;
         const start = performance.now();
 
-        return new Promise((resolve) => {
-            const frame = (now) => {
-                const t = Math.min(1, (now - start) / duration);
-                const band = from + (to - from) * t;
-
-                context.clearRect(0, 0, el.stage.clientWidth, el.stage.clientHeight);
-
-                for (const point of points) {
-                    const distance = Math.abs(point.y - band);
-                    const lit = Math.max(0, 1 - distance / 90);
-
-                    context.beginPath();
-                    context.arc(point.x, point.y, 0.7 + lit * 1.8, 0, Math.PI * 2);
-                    context.fillStyle = `rgba(125, 211, 252, ${0.18 + lit * 0.8})`;
-                    context.fill();
-                }
-
-                context.strokeStyle = 'rgba(125, 211, 252, 0.55)';
-                context.lineWidth = 2;
-                context.beginPath();
-                context.moveTo(offsetX, band);
-                context.lineTo(offsetX + (state.image?.naturalWidth ?? 0) * scale, band);
-                context.stroke();
-
-                if (t < 1) {
-                    requestAnimationFrame(frame);
-                    return;
-                }
-
-                drawMeasurements(context, measurement, toStage);
-                window.setTimeout(() => fadeOverlay(context, measurement, toStage), 1400);
-                resolve();
-            };
-
-            requestAnimationFrame(frame);
-        });
-    }
-
-    function drawMeasurements(context, measurement, toStage) {
-        const left = toStage({ x: measurement.center.x - measurement.faceWidthPx / 2, y: measurement.eyeLine.y });
-        const right = toStage({ x: measurement.center.x + measurement.faceWidthPx / 2, y: measurement.eyeLine.y });
-
-        context.clearRect(0, 0, el.stage.clientWidth, el.stage.clientHeight);
-
-        context.strokeStyle = 'rgba(125, 211, 252, 0.9)';
-        context.lineWidth = 2;
-        context.setLineDash([6, 5]);
-        context.beginPath();
-        context.moveTo(left.x, left.y);
-        context.lineTo(right.x, right.y);
-        context.stroke();
-        context.setLineDash([]);
-
-        for (const point of [left, right]) {
-            context.beginPath();
-            context.arc(point.x, point.y, 4, 0, Math.PI * 2);
-            context.fillStyle = 'rgba(125, 211, 252, 0.95)';
-            context.fill();
-        }
-    }
-
-    function fadeOverlay(context, measurement, toStage) {
-        const start = performance.now();
-
         const frame = (now) => {
-            const t = Math.min(1, (now - start) / 500);
+            const t = Math.min(1, (now - start) / duration);
+            const band = from + (to - from) * t;
+            const fade = t > 0.85 ? 1 - (t - 0.85) / 0.15 : 1;
 
             context.clearRect(0, 0, el.stage.clientWidth, el.stage.clientHeight);
-            context.globalAlpha = 1 - t;
-            drawMeasurements(context, measurement, toStage);
-            context.globalAlpha = 1;
 
-            if (t < 1) requestAnimationFrame(frame);
-            else context.clearRect(0, 0, el.stage.clientWidth, el.stage.clientHeight);
+            for (const point of points) {
+                const lit = Math.max(0, 1 - Math.abs(point.y - band) / 90);
+
+                context.beginPath();
+                context.arc(point.x, point.y, 0.7 + lit * 1.8, 0, Math.PI * 2);
+                context.fillStyle = `rgba(125, 211, 252, ${(0.18 + lit * 0.8) * fade})`;
+                context.fill();
+            }
+
+            if (t < 1) {
+                requestAnimationFrame(frame);
+                return;
+            }
+
+            context.clearRect(0, 0, el.stage.clientWidth, el.stage.clientHeight);
         };
 
         requestAnimationFrame(frame);
@@ -413,11 +371,12 @@ function initTryOn(stage) {
             : 'set by hand';
         el.ipd.textContent = state.measurement ? `${Math.round(state.measurement.ipdPx)} px` : '—';
 
-        if (data.hat_fits === null || data.hat_fits === undefined) {
-            showFit(data.note, 'alert-info');
-        } else {
-            showFit(data.note, data.hat_fits ? 'alert-success' : 'alert-warning');
-        }
+        showFit(
+            data.note,
+            data.hat_fits === null || data.hat_fits === undefined
+                ? 'alert-info'
+                : data.hat_fits ? 'alert-success' : 'alert-warning',
+        );
     }
 
     function showFit(message, tone) {
@@ -484,8 +443,9 @@ function initTryOn(stage) {
     el.rescanBtn?.addEventListener('click', () => scan());
 
     el.resetBtn?.addEventListener('click', () => {
-        autoPlace();
-        applyPlacement();
+        state.orbit = { yaw: 0, pitch: 0, zoom: 1 };
+        state.nudge = { x: 0, y: 0 };
+        applyTransforms();
     });
 
     el.manual?.addEventListener('input', () => {
@@ -499,11 +459,9 @@ function initTryOn(stage) {
     let drag = null;
 
     el.stage.addEventListener('pointerdown', (event) => {
-        if (!state.placement) return;
-
-        drag = { x: event.clientX, y: event.clientY, move: event.shiftKey || event.button === 2 };
+        drag = { x: event.clientX, y: event.clientY, nudge: event.shiftKey || event.button === 2 };
         el.stage.setPointerCapture(event.pointerId);
-        el.stage.style.cursor = drag.move ? 'move' : 'grabbing';
+        el.stage.style.cursor = drag.nudge ? 'move' : 'grabbing';
     });
 
     el.stage.addEventListener('pointermove', (event) => {
@@ -515,15 +473,15 @@ function initTryOn(stage) {
         drag.x = event.clientX;
         drag.y = event.clientY;
 
-        if (drag.move) {
-            state.placement.x += dx;
-            state.placement.y += dy;
+        if (drag.nudge) {
+            state.nudge.x += dx;
+            state.nudge.y -= dy;
         } else {
-            state.placement.yaw = clamp(state.placement.yaw + dx * 0.008, -1.2, 1.2);
-            state.placement.pitch = clamp(state.placement.pitch + dy * 0.006, -0.7, 0.7);
+            state.orbit.yaw = clamp(state.orbit.yaw + dx * 0.006, -MAX_YAW, MAX_YAW);
+            state.orbit.pitch = clamp(state.orbit.pitch + dy * 0.005, -MAX_PITCH, MAX_PITCH);
         }
 
-        applyPlacement();
+        applyTransforms();
     });
 
     const endDrag = (event) => {
@@ -541,44 +499,40 @@ function initTryOn(stage) {
     el.stage.addEventListener(
         'wheel',
         (event) => {
-            if (!state.placement) return;
-
             event.preventDefault();
-            state.placement.scale = clamp(state.placement.scale * (1 - event.deltaY * 0.0012), 0.45, 2.6);
-            applyPlacement();
+            state.orbit.zoom = clamp(state.orbit.zoom * (1 - event.deltaY * 0.0012), 0.6, 2.4);
+            applyTransforms();
         },
         { passive: false },
     );
 
     window.addEventListener('resize', () => {
         view.resize();
-        autoPlace();
-        applyPlacement();
+        if (state.measurement) buildModel();
         clearOverlay();
     });
 
-    // Before there's a photo, idle-spin the hat so the shopper can see what
-    // they're about to try on (and that it really is 3D).
+    // Before there's a photo, idle-spin the hat on its own so the shopper can
+    // see what they're about to try on.
     let idleFrame = null;
 
     function startIdle() {
         if (idleFrame !== null) return;
 
         const step = () => {
-            if (state.image || !state.placement) {
+            if (state.image) {
                 idleFrame = null;
+                view.setPreviewSpin(null);
                 return;
             }
 
-            state.placement.yaw += 0.007;
-            view.place(state.placement, photoRect());
+            view.setPreviewSpin(performance.now() / 1400);
             idleFrame = requestAnimationFrame(step);
         };
 
         idleFrame = requestAnimationFrame(step);
     }
 
-    // Kick things off with whatever hat is preselected.
     view.resize();
     swapHat();
     startIdle();
@@ -589,21 +543,22 @@ function clamp(value, min, max) {
 }
 
 /**
- * The WebGL stage. The camera is set up so that one world unit equals one
- * CSS pixel on the z = 0 plane (where the photo is), which makes placing the
- * hat from face landmarks a straight coordinate conversion — while still
- * being a real perspective camera, so the hat reads as a solid object.
+ * The WebGL stage.
+ *
+ * One world unit is one CSS pixel on the z = 0 plane, so landmarks convert to
+ * scene coordinates directly. The head mesh and the hat live in a single
+ * group that rotates together — turning the model turns both.
  */
 function createScene(canvas) {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setClearColor(0x000000, 0);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(FOV, 1, 1, 20000);
+    const camera = new THREE.PerspectiveCamera(FOV, 1, 1, 40000);
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x1b2430, 1.35));
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.55);
+    const key = new THREE.DirectionalLight(0xffffff, 1.5);
     key.position.set(-400, 700, 900);
     scene.add(key);
 
@@ -611,12 +566,18 @@ function createScene(canvas) {
     rim.position.set(600, 300, -500);
     scene.add(rim);
 
-    const pivot = new THREE.Group();
-    scene.add(pivot);
+    // Everything that belongs to "the shopper's head" — mesh and hat.
+    const headGroup = new THREE.Group();
+    scene.add(headGroup);
 
+    const hatPivot = new THREE.Group();
+    headGroup.add(hatPivot);
+
+    let head = null;
     let hat = null;
     let width = 1;
     let height = 1;
+    let previewSpin = null;
 
     function resize() {
         const stage = canvas.parentElement;
@@ -624,9 +585,7 @@ function createScene(canvas) {
         width = stage.clientWidth || 1;
         height = stage.clientHeight || 1;
 
-        const ratio = Math.min(window.devicePixelRatio || 1, 2);
-
-        renderer.setPixelRatio(ratio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         renderer.setSize(width, height, false);
 
         camera.aspect = width / height;
@@ -638,50 +597,78 @@ function createScene(canvas) {
         render();
     }
 
+    function setHead(mesh, center) {
+        if (head) {
+            headGroup.remove(head);
+            disposeTree(head);
+        }
+
+        head = mesh;
+
+        if (head) {
+            headGroup.add(head);
+            headGroup.position.copy(center);
+        } else {
+            headGroup.position.set(0, 0, 0);
+        }
+
+        render();
+    }
+
     function setHat(group) {
         if (hat) {
-            pivot.remove(hat);
+            hatPivot.remove(hat);
             disposeTree(hat);
         }
 
         hat = group;
 
-        if (hat) pivot.add(hat);
+        if (hat) hatPivot.add(hat);
 
         render();
     }
 
     /**
-     * @param {{x:number,y:number,radius:number,yaw:number,pitch:number,roll:number,scale:number}} placement
-     *   in stage CSS pixels, origin top-left
+     * @param {{yaw:number,pitch:number,zoom:number}} orbit  applied to head + hat together
+     * @param {?{x:number,y:number,radius:number,roll:number,yaw:number,pitch:number}} fit
+     * @param {{x:number,y:number}} nudge manual hat offset, in CSS pixels
      */
-    function place(placement, rect) {
-        if (!hat || !placement) {
-            render();
-            return;
+    function apply(orbit, fit, nudge) {
+        headGroup.rotation.set(orbit.pitch, orbit.yaw, 0, 'YXZ');
+        headGroup.scale.setScalar(orbit.zoom);
+
+        if (hat) {
+            if (fit) {
+                hatPivot.position.set(fit.x + nudge.x, fit.y + nudge.y, 0);
+                hatPivot.scale.setScalar(fit.radius);
+                hatPivot.rotation.set(fit.pitch, fit.yaw, -fit.roll, 'YXZ');
+            } else {
+                // No face yet: park the hat mid-stage as a preview.
+                const radius = Math.min(width, height) * 0.2;
+
+                hatPivot.position.set(0, height * 0.08, 0);
+                hatPivot.scale.setScalar(radius);
+                hatPivot.rotation.set(0.12, previewSpin ?? 0, 0, 'YXZ');
+            }
         }
 
-        const radius = placement.radius * placement.scale;
-
-        pivot.position.set(
-            placement.x - rect.stageWidth / 2,
-            rect.stageHeight / 2 - placement.y,
-            // Push the hat toward the viewer by roughly the head's own depth,
-            // so perspective makes it sit in front of the face, not on it.
-            radius * 0.35,
-        );
-
-        pivot.scale.setScalar(radius);
-        pivot.rotation.set(placement.pitch, placement.yaw, -placement.roll, 'YXZ');
-
         render();
+    }
+
+    function setPreviewSpin(angle) {
+        previewSpin = angle;
+
+        if (!head && hat) {
+            hatPivot.rotation.y = angle ?? 0;
+            render();
+        }
     }
 
     function render() {
         renderer.render(scene, camera);
     }
 
-    return { resize, setHat, place, render };
+    return { resize, setHead, setHat, apply, setPreviewSpin, render };
 }
 
 function disposeTree(root) {
@@ -691,6 +678,9 @@ function disposeTree(root) {
         child.geometry?.dispose();
 
         const materials = Array.isArray(child.material) ? child.material : [child.material];
-        materials.forEach((material) => material?.dispose());
+        materials.forEach((material) => {
+            material?.map?.dispose();
+            material?.dispose();
+        });
     });
 }

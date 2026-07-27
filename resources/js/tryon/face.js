@@ -130,6 +130,8 @@ export function measureFace(landmarks, width, height) {
         roll,
         yaw,
         pitch,
+        // The raw normalised landmarks — the 3D head mesh is built from these.
+        landmarks,
         // Every point, in photo pixels — used for the scan animation.
         points: landmarks.map((point) => ({ x: point.x * width, y: point.y * height })),
     };
