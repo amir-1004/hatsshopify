@@ -10,6 +10,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { detectFace, measureFace } from './tryon/face.js';
 import { buildHat } from './tryon/hat-model.js';
 import { loadHatAsset, stylesWithAssets } from './tryon/hat-asset.js';
+import { appearanceFromPhoto } from './tryon/hat-appearance.js';
 import { buildHeadMesh } from './tryon/head-mesh.js';
 
 // Portraits are shot on long lenses, and the virtual camera has to agree
@@ -98,31 +99,46 @@ function initTryOn(stage) {
             return;
         }
 
-        // Procedural first so something is on screen immediately, then swap in
-        // the photoreal model if this style has one.
+        // Something on screen immediately, before any of the reading below.
         view.setHat(buildHat(hat.style, hat.hex));
         applyTransforms();
 
-        const asset = await loadHatAsset(hat.style);
+        // Geometry and material are resolved independently. Geometry comes
+        // from a scan where one exists and procedural shapes otherwise;
+        // material is always read off this hat's own product photo, which is
+        // the one asset every hat is guaranteed to have. So a hat added years
+        // from now still renders as the fabric it's actually made of, with no
+        // per-product work.
+        const [asset, appearance] = await Promise.all([
+            loadHatAsset(hat.style),
+            appearanceFromPhoto(hat.image),
+        ]);
 
-        // Guard against the shopper changing hats while the model downloaded.
-        if (asset && currentHat()?.style === hat.style) {
-            view.setHat(asset);
-            applyTransforms();
-        }
+        // Guard against the shopper changing hats while those were loading.
+        if (currentHat()?.id !== hat.id) return;
 
-        markProvenance(Boolean(asset));
+        // A scan carries its own photographed materials — don't overwrite them.
+        view.setHat(asset ?? buildHat(hat.style, hat.hex, appearance));
+        applyTransforms();
+
+        markProvenance(Boolean(asset), Boolean(appearance?.patch));
     }
 
     /**
      * Say plainly whether this hat is a real scan or generated geometry.
      * Overstating what a preview shows is how you get returns.
      */
-    function markProvenance(isScan) {
+    function markProvenance(isScan, fromPhoto) {
         if (!el.provenance) return;
 
-        el.provenance.textContent = isScan ? '📷 Photoreal 3D scan' : '⚙️ Generated 3D preview';
-        el.provenance.className = `badge badge-sm ${isScan ? 'badge-success' : 'badge-ghost'}`;
+        const [label, tone] = isScan
+            ? ['📷 Photoreal 3D scan', 'badge-success']
+            : fromPhoto
+              ? ['🧵 Fabric from product photo', 'badge-info']
+              : ['⚙️ Generated 3D preview', 'badge-ghost'];
+
+        el.provenance.textContent = label;
+        el.provenance.className = `badge badge-sm ${tone}`;
     }
 
     el.hatSelect?.addEventListener('change', () => {

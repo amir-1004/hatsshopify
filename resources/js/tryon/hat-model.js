@@ -67,18 +67,15 @@ function weave() {
 }
 
 /**
- * The seams and topstitching of a six-panel cap, drawn into a texture and
- * multiplied over the crown's colour.
+ * The crown's albedo: the hat's own cloth, with six-panel seams, topstitching
+ * and eyelets drawn over it.
  *
- * A cap's crown is six panels sewn together, and the eye reads those seams
- * before it reads the silhouette — a seamless dome looks like a bowl however
- * well it's lit.
+ * Both halves matter. A seamless dome reads as a bowl however well it's lit —
+ * the eye finds a cap's panel seams before it finds the silhouette. And the
+ * cloth underneath is lifted straight out of the merchant's product photo, so
+ * the crown is made of the fabric the hat is actually made of.
  */
-let panelTexture = null;
-
-function panels() {
-    if (panelTexture) return panelTexture;
-
+function crownTexture(cloth) {
     const width = 1024;
     const height = 512;
     const canvas = document.createElement('canvas');
@@ -88,8 +85,20 @@ function panels() {
 
     const context = canvas.getContext('2d');
 
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, width, height);
+    if (cloth) {
+        // Tile the photographed patch across the crown's UV space.
+        const pattern = context.createPattern(cloth, 'repeat');
+        const scale = height / (cloth.height * 2.2);
+
+        context.save();
+        context.scale(scale, scale);
+        context.fillStyle = pattern;
+        context.fillRect(0, 0, width / scale, height / scale);
+        context.restore();
+    } else {
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, width, height);
+    }
 
     // Six meridian seams, each flanked by a row of topstitching.
     for (let panel = 0; panel < 6; panel += 1) {
@@ -124,41 +133,67 @@ function panels() {
         context.fill();
     }
 
-    panelTexture = new THREE.CanvasTexture(canvas);
-    panelTexture.colorSpace = THREE.SRGBColorSpace;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
 
-    return panelTexture;
+    return texture;
 }
 
-function fabric(hex, factor = 1, { seams = false } = {}) {
-    if (seams) {
-        return new THREE.MeshPhysicalMaterial({
-            color: shade(hex, factor),
-            map: panels(),
-            roughness: 0.78,
-            metalness: 0,
-            normalMap: weave(),
-            normalScale: new THREE.Vector2(0.45, 0.45),
-            sheen: 0.55,
-            sheenRoughness: 0.85,
-            sheenColor: shade(hex, 1.5),
-            envMapIntensity: 0.75,
-        });
-    }
+function clothNormal(cloth) {
+    const texture = new THREE.CanvasTexture(cloth);
 
-    return new THREE.MeshPhysicalMaterial({
-        color: shade(hex, factor),
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(4, 4);
+
+    return texture;
+}
+
+/**
+ * Build a fabric material for one part of the hat.
+ *
+ * `appearance` is what was read off the product photo — its real colour, a
+ * tileable patch of its cloth, and a normal map derived from that patch's own
+ * shading. When it's missing (no photo, a cross-origin one, or a picture with
+ * no hat in it) this falls back to the product's colour and a synthetic weave,
+ * so a hat always renders.
+ */
+function shadeColor(color, factor) {
+    return new THREE.Color(
+        Math.min(1, color.r * factor),
+        Math.min(1, color.g * factor),
+        Math.min(1, color.b * factor),
+    );
+}
+
+function fabric(hex, factor = 1, { seams = false, appearance = null } = {}) {
+    const base = appearance?.color
+        ? shadeColor(appearance.color, factor)
+        : shade(hex, factor);
+
+    const material = new THREE.MeshPhysicalMaterial({
+        color: base,
         roughness: 0.78,
         metalness: 0,
-        normalMap: weave(),
+        normalMap: appearance?.normal ? clothNormal(appearance.normal) : weave(),
         normalScale: new THREE.Vector2(0.45, 0.45),
         // Brushed cotton picks up a soft off-axis highlight rather than a
         // hard specular dot.
         sheen: 0.55,
         sheenRoughness: 0.85,
-        sheenColor: shade(hex, 1.5),
+        sheenColor: shadeColor(base, 1.5),
         envMapIntensity: 0.75,
     });
+
+    if (seams) {
+        material.map = crownTexture(appearance?.patch ?? null);
+
+        // The map already carries the cloth's own colour, so tinting it again
+        // would double the darkness.
+        if (appearance?.patch) material.color = new THREE.Color(0xffffff);
+    }
+
+    return material;
 }
 
 /**
@@ -259,38 +294,38 @@ function button(material, height) {
     return mesh;
 }
 
-function baseball(hex) {
+function baseball(hex, appearance) {
     const group = new THREE.Group();
 
-    group.add(crown(fabric(hex, 1, { seams: true })));
-    group.add(visor(fabric(hex, 0.72), { underside: fabric(hex, 0.42) }));
-    group.add(sweatband(fabric(hex, 0.72)));
-    group.add(button(fabric(hex, 1.15), 0.71));
+    group.add(crown(fabric(hex, 1, { seams: true, appearance })));
+    group.add(visor(fabric(hex, 0.72, { appearance }), { underside: fabric(hex, 0.42, { appearance }) }));
+    group.add(sweatband(fabric(hex, 0.72, { appearance })));
+    group.add(button(fabric(hex, 1.15, { appearance }), 0.71));
 
     return group;
 }
 
-function snapback(hex) {
+function snapback(hex, appearance) {
     const group = new THREE.Group();
 
-    group.add(crown(fabric(hex, 1, { seams: true }), { height: 0.82, depth: 1.16 }));
-    group.add(visor(fabric(hex, 0.7), { reach: 1.75, width: 1.06, tilt: 0.02, thickness: 0.07, curve: 0, squared: true }));
-    group.add(sweatband(fabric(hex, 0.7)));
-    group.add(button(fabric(hex, 1.15), 0.83));
+    group.add(crown(fabric(hex, 1, { seams: true, appearance }), { height: 0.82, depth: 1.16 }));
+    group.add(visor(fabric(hex, 0.7, { appearance }), { reach: 1.75, width: 1.06, tilt: 0.02, thickness: 0.07, curve: 0, squared: true }));
+    group.add(sweatband(fabric(hex, 0.7, { appearance })));
+    group.add(button(fabric(hex, 1.15, { appearance }), 0.83));
 
     return group;
 }
 
-function trucker(hex) {
+function trucker(hex, appearance) {
     const group = new THREE.Group();
 
-    group.add(crown(fabric(hex, 1, { seams: true }), { height: 0.78, depth: 1.18 }));
+    group.add(crown(fabric(hex, 1, { seams: true, appearance }), { height: 0.78, depth: 1.18 }));
 
     // Lighter mesh panels across the back half of the crown.
     const panels = new THREE.Mesh(
         new THREE.SphereGeometry(1.004, 48, 32, Math.PI / 2, Math.PI, 0, Math.PI / 2),
         new THREE.MeshStandardMaterial({
-            color: shade(hex, 1.45),
+            color: appearance?.color ? shadeColor(appearance.color, 1.45) : shade(hex, 1.45),
             roughness: 0.95,
             side: THREE.DoubleSide,
         }),
@@ -298,35 +333,35 @@ function trucker(hex) {
     panels.scale.set(1, 0.78, 1.18);
     group.add(panels);
 
-    group.add(visor(fabric(hex, 0.68), { reach: 1.65, width: 1.02, tilt: 0.14, curve: 0.03, squared: true }));
-    group.add(sweatband(fabric(hex, 0.68)));
+    group.add(visor(fabric(hex, 0.68, { appearance }), { reach: 1.65, width: 1.02, tilt: 0.14, curve: 0.03, squared: true }));
+    group.add(sweatband(fabric(hex, 0.68, { appearance })));
 
     return group;
 }
 
-function beanie(hex) {
+function beanie(hex, appearance) {
     const group = new THREE.Group();
 
-    group.add(crown(fabric(hex), { height: 0.95, depth: 1.1 }));
+    group.add(crown(fabric(hex, 1, { appearance }), { height: 0.95, depth: 1.1 }));
 
     // Rolled cuff.
-    const cuff = new THREE.Mesh(new THREE.TorusGeometry(1.01, 0.13, 14, 56), fabric(hex, 0.8));
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(1.01, 0.13, 14, 56), fabric(hex, 0.8, { appearance }));
     cuff.rotation.x = Math.PI / 2;
     cuff.scale.z = 1.1;
     cuff.position.y = 0.12;
     group.add(cuff);
 
-    const pompom = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 20), fabric(hex, 1.35));
+    const pompom = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 20), fabric(hex, 1.35, { appearance }));
     pompom.position.y = 0.99;
     group.add(pompom);
 
     return group;
 }
 
-function bucket(hex) {
+function bucket(hex, appearance) {
     const group = new THREE.Group();
 
-    group.add(crown(fabric(hex), { height: 0.62, depth: 1.12 }));
+    group.add(crown(fabric(hex, 1, { appearance }), { height: 0.62, depth: 1.12 }));
 
     // A brim that droops all the way round, swept as a surface of revolution.
     const profile = [];
@@ -345,7 +380,7 @@ function bucket(hex) {
     );
     brim.scale.z = 1.08;
     group.add(brim);
-    group.add(sweatband(fabric(hex, 0.75), { radius: 0.99, tube: 0.05 }));
+    group.add(sweatband(fabric(hex, 0.75, { appearance }), { radius: 0.99, tube: 0.05 }));
 
     return group;
 }
@@ -363,11 +398,12 @@ const BUILDERS = {
  *
  * @param {string} style one of the catalog styles
  * @param {string} hex   resolved `#rrggbb` (the server resolves color names)
+ * @param {?object} appearance material read off the product photo, if any
  * @returns {THREE.Group} crown radius 1, base at y = 0, facing +z
  */
-export function buildHat(style, hex) {
+export function buildHat(style, hex, appearance = null) {
     const build = BUILDERS[style] ?? baseball;
-    const group = build(hex || '#4c6ef5');
+    const group = build(hex || '#4c6ef5', appearance);
 
     group.traverse((child) => {
         if (child.isMesh) child.castShadow = true;
