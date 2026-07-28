@@ -268,6 +268,13 @@ weave, so a hat always renders.
 product photo*, or *Generated 3D preview* — and the page opens on a scanned
 product. A hat shop that overstates what a preview shows earns returns.
 
+Colour is treated as a claim about the product, not a look. There's no filmic
+tone mapping — ACES pulls a deep crimson toward pink, which is fine on a film
+frame and wrong in a shop — and colours read off a canvas are declared as sRGB
+when handed to three.js, which runs colour management on and would otherwise
+read raw floats as linear working space and render every hat a space too
+bright.
+
 Adding more scans is a manifest entry and a file — `resources/js/tryon/hat-asset.js`
 renders the procedural hat first and swaps in a real model when one exists, so
 a missing or broken asset degrades instead of breaking.
