@@ -271,7 +271,7 @@ function cap(hex, appearance, { crownOpts = {}, billOpts = {}, button = true } =
 function baseball(hex, appearance) {
     return cap(hex, appearance, {
         crownOpts: { height: 0.82, depth: 1.14 },
-        billOpts: { reach: 0.88, drop: 0.3, spread: 1.45 },
+        billOpts: { reach: 0.9, drop: 0.28, spread: 1.38 },
     });
 }
 
@@ -279,14 +279,14 @@ function snapback(hex, appearance) {
     // Taller, boxier crown; a longer bill that barely drops.
     return cap(hex, appearance, {
         crownOpts: { height: 0.98, depth: 1.12, crease: 0.016 },
-        billOpts: { reach: 1.0, drop: 0.1, spread: 1.5, thickness: 0.07 },
+        billOpts: { reach: 1.02, drop: 0.08, spread: 1.42, thickness: 0.07 },
     });
 }
 
 function trucker(hex, appearance) {
     const group = cap(hex, appearance, {
         crownOpts: { height: 0.9, depth: 1.15 },
-        billOpts: { reach: 0.9, drop: 0.18, spread: 1.48 },
+        billOpts: { reach: 0.92, drop: 0.16, spread: 1.4 },
         button: false,
     });
 

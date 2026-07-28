@@ -108,7 +108,7 @@ export function crownGeometry({
  * @param {number} options.depth    the head ellipse's front-to-back stretch
  */
 export function billGeometry({
-    spread = 1.45,
+    spread = 1.38,
     reach = 0.85,
     drop = 0.3,
     thickness = 0.055,
@@ -131,9 +131,11 @@ export function billGeometry({
         // Radially outward, in the plane of the band.
         const outward = new THREE.Vector2(baseX, baseZ).normalize();
 
-        // Longest ahead, shortest at the ends — that taper is what stops the
-        // bill reading as a disc.
-        const taper = 0.32 + 0.68 * Math.pow(Math.max(0, Math.cos(angle * 0.92)), 1.4);
+        // Longest straight ahead, falling to *nothing* at the ends. Reaching
+        // zero is the load-bearing part: leave any width at the extremes and
+        // the brim carries on round the head and the thing reads as a sun
+        // hat. A bill has to vanish into the band where it stops.
+        const taper = Math.pow(Math.cos((angle / spread) * (Math.PI / 2)), 1.15);
         const ribReach = reach * taper;
 
         for (let t = 0; t <= along; t += 1) {
