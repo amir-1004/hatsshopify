@@ -92,6 +92,10 @@ jobs:
           check GET  /try-on/1 200
           check GET  /try-on/999999 404
           check GET  /hat-art/Baseball 200
+          check GET  /models/hats/manifest.json 200
+          check GET  /models/hats/fishermans_hat/fishermans_hat_1k.gltf 200
+          check GET  /models/hats/fishermans_hat/fishermans_hat.bin 200
+          check GET  /models/hats/fishermans_hat/textures/fishermans_hat_diff_1k.jpg 200
           check GET  /api/hats 200
           check GET  /api/orders 200
           check GET  /webhook/shopify/orders-create 405
