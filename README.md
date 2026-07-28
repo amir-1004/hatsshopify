@@ -220,6 +220,40 @@ about the back of a head; closing the skull for a full 360° is a v2 job.
 This is the technique behind [PyFace3D](https://github.com/Dor-sketch/PyFace3D)
 and Babylon's [facecap](https://github.com/imerso/facecap), done in Three.js.
 
+### The hats themselves
+
+`Desert Bucket Hat` renders from a **real photogrammetry scan** — PierreB3D's
+fisherman's hat via [Poly Haven](https://polyhaven.com), CC0/public domain:
+10,304 triangles with 1k diffuse, normal and ARM maps, so you see actual
+fabric weave, stitching and wear rather than shaded geometry.
+
+Calibration is derived rather than eyeballed. The scan is at real-world scale
+(0.324 m across the brim); the loader normalises width to 2 units, which would
+leave the head opening at ~0.56 instead of 1, because a bucket hat's brim is
+roughly twice its head opening. Hence `scale: 1.8` in
+`public/models/hats/manifest.json`, and an offset that drops the model so its
+own `y=0` — where brim meets crown — lands on the band line.
+
+The other styles still use procedural geometry, and **the UI says so**: a
+badge reads *Photoreal 3D scan* or *Generated 3D preview*, and the page opens
+on a scanned product. A hat shop that overstates what a preview shows earns
+returns.
+
+Adding more scans is a manifest entry and a file — `resources/js/tryon/hat-asset.js`
+renders the procedural hat first and swaps in a real model when one exists, so
+a missing or broken asset degrades instead of breaking.
+
+**Why there's only one scan:** every free image-to-3D model (TRELLIS,
+Hunyuan3D, TripoSR, stable-fast-3d) runs on HuggingFace ZeroGPU, which gates
+GPU time on a header their edge injects for browser sessions — an API caller
+can't supply it, [including PRO
+subscribers](https://discuss.huggingface.co/t/incapable-to-use-zerogpu-resource-via-hugging-face-pro-quota-with-gradio-api/132840).
+Verified by control test: a CPU endpoint on the same Space returns
+`event: complete`, the GPU one returns `event: error`. Poly Haven has exactly
+one hat, ambientCG's models are all terrain, and the baseball caps on GitHub
+are mirrors whose licensing can't be verified. So: one scan, honestly
+labelled, rather than an asset with murky provenance.
+
 Design notes worth saying out loud in an interview:
 
 - **The photo never leaves the device.** Face detection is WASM running in the
