@@ -5,6 +5,7 @@
 // head radius it measured (in screen pixels) and drop it on the head.
 
 import * as THREE from 'three';
+import { crownGeometry, billGeometry, bandGeometry } from './cap-geometry.js';
 
 /**
  * Multiply a hex color's channels — <1 darkens, >1 lightens.
@@ -214,70 +215,6 @@ function crown(material, { height = 0.7, depth = 1.2, segments = 48 } = {}) {
 }
 
 /**
- * A visor: half an ellipse extruded into a slab, laid flat and tilted down
- * at the front.
- */
-function visor(material, { reach = 1.7, width = 1.0, thickness = 0.05, tilt = 0.3, curve = 0.075, squared = false, underside = null } = {}) {
-    const shape = new THREE.Shape();
-
-    if (squared) {
-        // Flat-brim look: straighter sides, squared-off tip.
-        shape.moveTo(-width, 0);
-        shape.lineTo(-width * 0.97, -reach * 0.78);
-        shape.quadraticCurveTo(-width * 0.82, -reach, -width * 0.45, -reach);
-        shape.lineTo(width * 0.45, -reach);
-        shape.quadraticCurveTo(width * 0.82, -reach, width * 0.97, -reach * 0.78);
-        shape.lineTo(width, 0);
-    } else {
-        shape.absellipse(0, 0, width, reach, Math.PI, Math.PI * 2, false);
-    }
-
-    const geometry = new THREE.ExtrudeGeometry(shape, {
-        depth: thickness,
-        bevelEnabled: true,
-        bevelSize: thickness * 0.35,
-        bevelThickness: thickness * 0.35,
-        bevelSegments: 2,
-        curveSegments: 48,
-    });
-
-    // Shape's -y becomes +z (forward); extrusion depth becomes thickness.
-    geometry.rotateX(-Math.PI / 2);
-
-    // A real bill curves down toward its tip rather than sticking out flat.
-    const position = geometry.attributes.position;
-    for (let i = 0; i < position.count; i += 1) {
-        const z = position.getZ(i);
-
-        position.setY(i, position.getY(i) - curve * z * z);
-    }
-    position.needsUpdate = true;
-    geometry.computeVertexNormals();
-
-    const mesh = new THREE.Mesh(geometry, material);
-
-    // Caps are almost always made with a contrasting darker under-brim, and
-    // it's the part you actually see once the hat is on someone's head.
-    if (underside) {
-        const lining = new THREE.Mesh(geometry, underside);
-
-        lining.scale.set(0.985, 1, 0.985);
-        lining.position.y = -thickness * 0.55;
-        mesh.add(lining);
-    }
-
-    mesh.rotation.x = tilt;
-
-    // Tilting about the crown's centre would sink the bill through the
-    // wearer's face by the time it reached the tip. A real bill hinges where
-    // it meets the band, so lift it back up by the drop it accumulates over
-    // the crown's own radius; only the part beyond the crown droops.
-    mesh.position.set(0, 0.02 + Math.sin(tilt) * 0.85, -0.12);
-
-    return mesh;
-}
-
-/**
  * The band where the crown meets the head.
  */
 function sweatband(material, { radius = 1.005, tube = 0.055 } = {}) {
@@ -290,55 +227,81 @@ function sweatband(material, { radius = 1.005, tube = 0.055 } = {}) {
     return mesh;
 }
 
-function button(material, height) {
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.09, 20, 16), material);
+/**
+ * Assemble a cap from the modelled crown and bill.
+ *
+ * `crownOpts` / `billOpts` are what separates the styles: a snapback is a
+ * taller crown with a long flat bill, a trucker sits between the two with
+ * mesh panels at the back.
+ */
+function cap(hex, appearance, { crownOpts = {}, billOpts = {}, button = true } = {}) {
+    const group = new THREE.Group();
+    const depth = crownOpts.depth ?? 1.14;
 
-    mesh.position.y = height;
+    group.add(new THREE.Mesh(
+        crownGeometry(crownOpts),
+        fabric(hex, 1, { seams: true, appearance }),
+    ));
 
-    return mesh;
+    // The bill's underside is darker on almost every real cap, and it's the
+    // face you actually see once the hat is on someone's head.
+    const bill = new THREE.Mesh(
+        billGeometry({ ...billOpts, depth }),
+        fabric(hex, 0.62, { appearance }),
+    );
+    bill.position.y = 0.045;
+    group.add(bill);
+
+    group.add(new THREE.Mesh(bandGeometry({ depth }), fabric(hex, 0.72, { appearance })));
+
+    if (button) {
+        const height = (crownOpts.height ?? 1) * 0.925;
+        const knob = new THREE.Mesh(
+            new THREE.SphereGeometry(0.055, 20, 16),
+            fabric(hex, 1.1, { appearance }),
+        );
+
+        knob.position.y = height + 0.02;
+        group.add(knob);
+    }
+
+    return group;
 }
 
 function baseball(hex, appearance) {
-    const group = new THREE.Group();
-
-    group.add(crown(fabric(hex, 1, { seams: true, appearance })));
-    group.add(visor(fabric(hex, 0.72, { appearance }), { underside: fabric(hex, 0.42, { appearance }) }));
-    group.add(sweatband(fabric(hex, 0.72, { appearance })));
-    group.add(button(fabric(hex, 1.15, { appearance }), 0.71));
-
-    return group;
+    return cap(hex, appearance, {
+        crownOpts: { height: 0.82, depth: 1.14 },
+        billOpts: { reach: 0.88, drop: 0.3, spread: 1.45 },
+    });
 }
 
 function snapback(hex, appearance) {
-    const group = new THREE.Group();
-
-    group.add(crown(fabric(hex, 1, { seams: true, appearance }), { height: 0.82, depth: 1.16 }));
-    group.add(visor(fabric(hex, 0.7, { appearance }), { reach: 1.75, width: 1.06, tilt: 0.02, thickness: 0.07, curve: 0, squared: true }));
-    group.add(sweatband(fabric(hex, 0.7, { appearance })));
-    group.add(button(fabric(hex, 1.15, { appearance }), 0.83));
-
-    return group;
+    // Taller, boxier crown; a longer bill that barely drops.
+    return cap(hex, appearance, {
+        crownOpts: { height: 0.98, depth: 1.12, crease: 0.016 },
+        billOpts: { reach: 1.0, drop: 0.1, spread: 1.5, thickness: 0.07 },
+    });
 }
 
 function trucker(hex, appearance) {
-    const group = new THREE.Group();
+    const group = cap(hex, appearance, {
+        crownOpts: { height: 0.9, depth: 1.15 },
+        billOpts: { reach: 0.9, drop: 0.18, spread: 1.48 },
+        button: false,
+    });
 
-    group.add(crown(fabric(hex, 1, { seams: true, appearance }), { height: 0.78, depth: 1.18 }));
-
-    // Lighter mesh panels across the back half of the crown.
-    const panels = new THREE.Mesh(
-        new THREE.SphereGeometry(1.004, 48, 32, Math.PI / 2, Math.PI, 0, Math.PI / 2),
+    // Lighter mesh across the back half of the crown.
+    const mesh = new THREE.Mesh(
+        // Back half only: phi = 0 faces +z, so start a quarter turn round.
+        crownGeometry({ height: 0.9, depth: 1.15, phiStart: Math.PI / 2, phiLength: Math.PI, scale: 1.004 }),
         new THREE.MeshStandardMaterial({
-            color: appearance?.color ? shadeColor(appearance.color, 1.45) : shade(hex, 1.45),
+            color: appearance?.color ? shadeColor(appearance.color, 1.4) : shade(hex, 1.4),
             roughness: 0.95,
             side: THREE.DoubleSide,
         }),
     );
-    panels.scale.set(1, 0.78, 1.18);
-    group.add(panels);
 
-    group.add(visor(fabric(hex, 0.68, { appearance }), { reach: 1.65, width: 1.02, tilt: 0.14, curve: 0.03, squared: true }));
-    group.add(sweatband(fabric(hex, 0.68, { appearance })));
+    group.add(mesh);
 
     return group;
 }
