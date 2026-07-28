@@ -179,10 +179,14 @@ function fabric(hex, factor = 1, { seams = false, appearance = null } = {}) {
         normalScale: new THREE.Vector2(0.45, 0.45),
         // Brushed cotton picks up a soft off-axis highlight rather than a
         // hard specular dot.
-        sheen: 0.55,
-        sheenRoughness: 0.85,
-        sheenColor: shadeColor(base, 1.5),
-        envMapIntensity: 0.75,
+        // Restrained now that the albedo carries the product's real colour.
+        // Cotton does pick up a soft sheen, but a strong one over an accurate
+        // red renders it pink — the light budget has to leave the pigment
+        // room to show.
+        sheen: 0.25,
+        sheenRoughness: 0.9,
+        sheenColor: shadeColor(base, 1.15),
+        envMapIntensity: 0.45,
     });
 
     if (seams) {

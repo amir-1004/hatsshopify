@@ -615,13 +615,13 @@ function createScene(canvas) {
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x1b2430, 0.7));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x1b2430, 0.45));
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.1);
+    const key = new THREE.DirectionalLight(0xffffff, 0.75);
     key.position.set(-400, 700, 900);
     scene.add(key);
 
-    const rim = new THREE.DirectionalLight(0x9ec5fe, 0.5);
+    const rim = new THREE.DirectionalLight(0x9ec5fe, 0.3);
     rim.position.set(600, 300, -500);
     scene.add(rim);
 
