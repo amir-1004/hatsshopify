@@ -234,10 +234,39 @@ roughly twice its head opening. Hence `scale: 1.8` in
 `public/models/hats/manifest.json`, and an offset that drops the model so its
 own `y=0` — where brim meets crown — lands on the band line.
 
-The other styles still use procedural geometry, and **the UI says so**: a
-badge reads *Photoreal 3D scan* or *Generated 3D preview*, and the page opens
-on a scanned product. A hat shop that overstates what a preview shows earns
-returns.
+### Every hat, not just the scanned one
+
+Hand-sourcing a scan per product doesn't scale — a shop adds hats forever and
+nobody photogrammetry-scans each one. So **geometry and material are resolved
+independently**:
+
+| | Source | Scales to new hats? |
+|---|---|---|
+| Geometry | a 3D scan where one exists, procedural per style otherwise | needs an asset |
+| Material | **the hat's own product photo, always** | automatically |
+
+The material half is the part that generalises, and it works because
+`hats.image_url` is `NOT NULL` and the API rejects blanks — the photo is the
+one asset every hat is guaranteed to have. `resources/js/tryon/hat-appearance.js`
+reads it: masks the backdrop off the corners, takes the **median** colour of
+the hat pixels (median, not mean, so specular highlights don't drag it), lifts
+the most solidly-hat window out at full resolution, mirror-tiles it so it
+repeats seamlessly, and runs a Sobel pass over its luminance to recover a
+normal map — the photo's own shading already encodes the weave, so this
+reads surface relief no synthetic pattern would match.
+
+The result: a tweed cap looks like tweed, a mesh trucker looks like mesh, and
+a hat added years from now renders as the fabric it's actually made of with no
+per-product work. **The better the merchant's photography, the better the 3D
+preview** — which is the right incentive for a hat shop to have.
+
+It degrades at every step. No photo, a cross-origin one, or a picture with no
+recognisable hat in it falls back to the product's colour and a synthetic
+weave, so a hat always renders.
+
+**The UI says which you're looking at** — *Photoreal 3D scan*, *Fabric from
+product photo*, or *Generated 3D preview* — and the page opens on a scanned
+product. A hat shop that overstates what a preview shows earns returns.
 
 Adding more scans is a manifest entry and a file — `resources/js/tryon/hat-asset.js`
 renders the procedural hat first and swaps in a real model when one exists, so

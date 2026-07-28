@@ -59,7 +59,9 @@
                             <div class="space-y-1">
                                 <span id="tryon-provenance" class="badge badge-sm badge-ghost">⚙️ Generated 3D preview</span>
                                 <p class="text-sm opacity-70">
-                                    Scanned products show their real fabric; the rest use generated geometry.
+                                    Colour and fabric are read from this hat's own product photo, so a
+                                    sharper photo makes a truer preview. Shape comes from a 3D scan
+                                    where we have one.
                                 </p>
                             </div>
                         </div>
