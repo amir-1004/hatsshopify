@@ -69,7 +69,52 @@ async function derive(url) {
 
     const tile = mirrorTile(patch);
 
-    return { color, patch: tile, normal: normalFromHeight(tile) };
+    // Order matters: the normal map is derived from the photo's *original*
+    // shading, because that's where the weave is recorded. Only then is the
+    // albedo flattened — baking a studio highlight into the colour map makes
+    // the hat render washed-out and lit from a direction that has nothing to
+    // do with our scene. `flatten` works in place, so it has to come second.
+    const normal = normalFromHeight(tile);
+
+    return { color, patch: flatten(tile, color), normal };
+}
+
+/**
+ * Strip the lighting out of a cloth patch, leaving its colour and weave.
+ *
+ * Each pixel is re-expressed as the hat's true median colour, nudged by how
+ * far that pixel sits from the patch's average brightness. Keeps the fabric's
+ * texture, drops the photographer's key light.
+ */
+function flatten(tile, color) {
+    const size = tile.width;
+    const context = tile.getContext('2d', { willReadFrequently: true });
+    const image = context.getImageData(0, 0, size, size);
+    const { data } = image;
+
+    const luminance = (i) => (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) / 255;
+
+    let mean = 0;
+    for (let i = 0; i < data.length; i += 4) mean += luminance(i);
+    mean /= data.length / 4;
+
+    if (mean <= 0.01) return tile;
+
+    // How much of the original variation to keep. Enough to read as cloth,
+    // little enough that the scene's own lighting stays in charge.
+    const relief = 0.35;
+
+    for (let i = 0; i < data.length; i += 4) {
+        const gain = 1 + relief * ((luminance(i) - mean) / mean);
+
+        data[i] = Math.min(255, color.r * 255 * gain);
+        data[i + 1] = Math.min(255, color.g * 255 * gain);
+        data[i + 2] = Math.min(255, color.b * 255 * gain);
+    }
+
+    context.putImageData(image, 0, 0);
+
+    return tile;
 }
 
 function loadImage(url) {
