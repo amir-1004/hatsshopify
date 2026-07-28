@@ -114,3 +114,18 @@ export async function loadHatAsset(style) {
 
     return model ? model.clone(true) : null;
 }
+
+/**
+ * Which styles have a real scanned model behind them, as opposed to the
+ * procedural geometry. Used to open the try-on on a product we can render
+ * photorealistically, and to say so honestly in the UI.
+ *
+ * @returns {Promise<string[]>}
+ */
+export async function stylesWithAssets() {
+    const manifest = await loadManifest();
+
+    return Object.entries(manifest)
+        .filter(([style, entry]) => !style.startsWith('_') && entry?.file)
+        .map(([style]) => style);
+}

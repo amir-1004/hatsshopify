@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { detectFace, measureFace } from './tryon/face.js';
 import { buildHat } from './tryon/hat-model.js';
-import { loadHatAsset } from './tryon/hat-asset.js';
+import { loadHatAsset, stylesWithAssets } from './tryon/hat-asset.js';
 import { buildHeadMesh } from './tryon/head-mesh.js';
 
 // Portraits are shot on long lenses, and the virtual camera has to agree
@@ -39,6 +39,7 @@ function initTryOn(stage) {
         video: document.getElementById('tryon-video'),
         hatSelect: document.getElementById('tryon-hat'),
         hatImage: document.getElementById('tryon-hat-image'),
+        provenance: document.getElementById('tryon-provenance'),
         fileInput: document.getElementById('tryon-photo'),
         cameraBtn: document.getElementById('tryon-camera-btn'),
         captureBtn: document.getElementById('tryon-capture-btn'),
@@ -109,6 +110,19 @@ function initTryOn(stage) {
             view.setHat(asset);
             applyTransforms();
         }
+
+        markProvenance(Boolean(asset));
+    }
+
+    /**
+     * Say plainly whether this hat is a real scan or generated geometry.
+     * Overstating what a preview shows is how you get returns.
+     */
+    function markProvenance(isScan) {
+        if (!el.provenance) return;
+
+        el.provenance.textContent = isScan ? '📷 Photoreal 3D scan' : '⚙️ Generated 3D preview';
+        el.provenance.className = `badge badge-sm ${isScan ? 'badge-success' : 'badge-ghost'}`;
     }
 
     el.hatSelect?.addEventListener('change', () => {
@@ -540,8 +554,23 @@ function initTryOn(stage) {
     }
 
     view.resize();
-    swapHat();
     startIdle();
+
+    // Unless the shopper asked for a specific hat, open on one we can render
+    // from a real scan rather than generated geometry — first impressions of
+    // a try-on are the whole product.
+    (async () => {
+        if (!el.hatSelect?.dataset.preselected) {
+            const scanned = await stylesWithAssets();
+            const best = [...(el.hatSelect?.options ?? [])].find((option) =>
+                scanned.includes(option.dataset.style),
+            );
+
+            if (best) el.hatSelect.value = best.value;
+        }
+
+        swapHat();
+    })();
 }
 
 function clamp(value, min, max) {

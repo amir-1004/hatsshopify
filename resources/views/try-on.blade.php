@@ -30,7 +30,11 @@
                     <div class="card-body gap-3">
                         <h2 class="card-title text-base">1. Pick a hat</h2>
 
-                        <select id="tryon-hat" class="select select-bordered w-full">
+                        <select
+                            id="tryon-hat"
+                            class="select select-bordered w-full"
+                            data-preselected="{{ $selected ? '1' : '' }}"
+                        >
                             @forelse ($hats as $hat)
                                 <option
                                     value="{{ $hat->id }}"
@@ -52,9 +56,12 @@
                             <div class="w-16 h-16 rounded-lg bg-base-200 overflow-hidden shrink-0">
                                 <img id="tryon-hat-image" src="" alt="" class="w-full h-full object-contain">
                             </div>
-                            <p class="text-sm opacity-70">
-                                The 3D hat takes its shape from the style and its color from the product.
-                            </p>
+                            <div class="space-y-1">
+                                <span id="tryon-provenance" class="badge badge-sm badge-ghost">⚙️ Generated 3D preview</span>
+                                <p class="text-sm opacity-70">
+                                    Scanned products show their real fabric; the rest use generated geometry.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </section>
