@@ -100,6 +100,10 @@ function flatten(tile, color) {
 
     if (mean <= 0.01) return tile;
 
+    // `color` is in linear working space; a canvas holds sRGB bytes. Convert
+    // on the way out or the texture comes back far too dark.
+    const srgb = color.clone().convertLinearToSRGB();
+
     // How much of the original variation to keep. Enough to read as cloth,
     // little enough that the scene's own lighting stays in charge.
     const relief = 0.35;
@@ -107,9 +111,9 @@ function flatten(tile, color) {
     for (let i = 0; i < data.length; i += 4) {
         const gain = 1 + relief * ((luminance(i) - mean) / mean);
 
-        data[i] = Math.min(255, color.r * 255 * gain);
-        data[i + 1] = Math.min(255, color.g * 255 * gain);
-        data[i + 2] = Math.min(255, color.b * 255 * gain);
+        data[i] = Math.min(255, srgb.r * 255 * gain);
+        data[i + 1] = Math.min(255, srgb.g * 255 * gain);
+        data[i + 2] = Math.min(255, srgb.b * 255 * gain);
     }
 
     context.putImageData(image, 0, 0);
@@ -213,7 +217,18 @@ function medianColor(data, mask) {
         return values[Math.floor(values.length / 2)] / 255;
     };
 
-    return new THREE.Color(median(channels[0]), median(channels[1]), median(channels[2]));
+    // These came out of a canvas, so they are sRGB and have to be declared as
+    // such. three.js runs with colour management on, and `new Color(r, g, b)`
+    // takes raw floats as *linear* working space — feeding it sRGB there
+    // silently renders every colour washed out (a deep crimson #ab182c comes
+    // out as #d65673, a pale pink), and no amount of tuning the lights fixes
+    // it because the pigment itself is wrong.
+    return new THREE.Color().setRGB(
+        median(channels[0]),
+        median(channels[1]),
+        median(channels[2]),
+        THREE.SRGBColorSpace,
+    );
 }
 
 /**
