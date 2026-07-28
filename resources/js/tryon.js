@@ -604,8 +604,12 @@ function createScene(canvas) {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setClearColor(0x000000, 0);
 
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    // No filmic tone curve. ACES looks great on a film frame and lies about
+    // saturated colour — it pulls a deep crimson cap toward pink. In commerce
+    // the render is a claim about the product, and a customer who returns a
+    // hat because the red wasn't that red costs more than a cinematic
+    // highlight rolloff is worth.
+    renderer.toneMapping = THREE.NoToneMapping;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(FOV, 1, 1, 40000);
